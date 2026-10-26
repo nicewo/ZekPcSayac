@@ -208,14 +208,37 @@ $("saveDeviceUidButton").addEventListener("click", async () => {
   }
 });
 
-onAuthStateChanged(auth, (user) => {
-  setSignedInView(user);
-  if (user) {
-    startListeners();
-  } else {
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    setSignedInView(null);
     if (stopStateListener) stopStateListener();
     if (stopConfigListener) stopConfigListener();
     stopStateListener = null;
     stopConfigListener = null;
+    return;
+  }
+
+  try {
+    // A successful authentication alone does not grant admin access.
+    // The admins/{UID} document is the explicit allow-list.
+    const adminSnapshot = await getDoc(doc(db, "admins", user.uid));
+    if (!adminSnapshot.exists()) {
+      setSignedInView(null);
+      setMessage(
+        "loginMessage",
+        `Giriş başarılı ancak yönetici yetkisi tanımlı değil. Bu hesabın UID'si: ${user.uid}. Firestore'da admins koleksiyonuna bu UID ile belge ekle.`,
+        "error"
+      );
+      await signOut(auth);
+      return;
+    }
+
+    setMessage("loginMessage", "");
+    setSignedInView(user);
+    startListeners();
+  } catch (error) {
+    setSignedInView(null);
+    setMessage("loginMessage", friendlyError(error), "error");
+    await signOut(auth);
   }
 });
