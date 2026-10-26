@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
@@ -11,8 +12,13 @@ namespace ZekPcSayac
 {
     public partial class MainWindow : Window
     {
-        // Prototype default only. This will become a setting from the web panel.
         private const int InitialDailyMinutes = 120;
+        private int _configuredDailyMinutes = InitialDailyMinutes;
+        private int _configuredBonusMinutes;
+        private readonly FirebaseSyncService _firebase;
+        private readonly DispatcherTimer _firebaseTimer;
+        private bool _firebaseBusy;
+        private bool _firebaseReady;
 
         private readonly DispatcherTimer _timer;
         private readonly DispatcherTimer _dailyCheckTimer;
@@ -41,6 +47,7 @@ namespace ZekPcSayac
             Directory.CreateDirectory(appDirectory);
             _stateFile = Path.Combine(appDirectory, "usage-state.json");
             _state = LoadState();
+            _firebase = new FirebaseSyncService(appDirectory);
 
             _timer = new DispatcherTimer
             {
@@ -57,22 +64,66 @@ namespace ZekPcSayac
             _dailyCheckTimer.Tick += DailyCheckTimer_Tick;
             _dailyCheckTimer.Start();
 
+            _firebaseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            _firebaseTimer.Tick += FirebaseTimer_Tick;
+
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
         }
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             RegisterStartup();
-            EnsureDailyState();
             PositionTimerWindow();
-            RenderState();
 
+            if (!_firebase.HasCredentials)
+                ShowFirebaseLoginDialog();
+
+            if (_firebase.HasCredentials)
+            {
+                try
+                {
+                    FirebaseSnapshot snapshot = await _firebase.ConnectAndReadAsync();
+                    _configuredDailyMinutes = snapshot.BaseSeconds / 60;
+                    _configuredBonusMinutes = snapshot.BonusSeconds / 60;
+                    string today = DateTime.Now.ToString("yyyy-MM-dd");
+
+                    if (snapshot.StateDocumentMissing || !string.Equals(snapshot.DateKey, today, StringComparison.Ordinal))
+                    {
+                        _state.BaseSeconds = snapshot.BaseSeconds;
+                        _state.BonusSeconds = snapshot.BonusSeconds;
+                        _state.RemainingSeconds = snapshot.BaseSeconds + snapshot.BonusSeconds;
+                        _state.DateKey = today;
+                    }
+                    else
+                    {
+                        _state.BaseSeconds = snapshot.BaseSeconds;
+                        _state.BonusSeconds = snapshot.BonusSeconds;
+                        _state.RemainingSeconds = Math.Max(0, snapshot.CloudRemainingSeconds ?? _state.RemainingSeconds);
+                        _state.IsPaused = snapshot.CloudIsPaused ?? _state.IsPaused;
+                        _state.DateKey = today;
+                    }
+
+                    _firebaseReady = true;
+                    await _firebase.PushStateAsync(_state.RemainingSeconds, _state.IsPaused, _state.DateKey);
+                    _firebaseTimer.Start();
+                    MessageBox.Show("Firebase bağlantısı kuruldu. PC kullanım durumu web paneliyle eşitleniyor.",
+                        "ZekPcSayac", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    LogFirebaseError(ex);
+                    MessageBox.Show("Firebase bağlantısı kurulamadı. Uygulama yerel sayaçla çalışmaya devam edecek.\n\n" + ex.Message,
+                        "Firebase bağlantı hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+
+            EnsureDailyState();
+            RenderState();
             if (_state.IsPaused || _state.RemainingSeconds <= 0)
             {
                 _state.IsPaused = true;
-                if (_state.AudioWasMutedByApp)
-                    SetSystemMute(true);
+                if (_state.AudioWasMutedByApp) SetSystemMute(true);
                 SaveState();
                 EnterPausedScreen();
             }
@@ -82,6 +133,105 @@ namespace ZekPcSayac
                 SaveState();
                 _timer.Start();
             }
+        }
+
+        private bool ShowFirebaseLoginDialog()
+        {
+            var emailBox = new System.Windows.Controls.TextBox
+            {
+                Width = 260, FontSize = 14, Margin = new Thickness(0, 6, 0, 12)
+            };
+            var passwordBox = new System.Windows.Controls.PasswordBox
+            {
+                Width = 260, FontSize = 14, Margin = new Thickness(0, 6, 0, 14)
+            };
+            var error = new System.Windows.Controls.TextBlock
+            {
+                Text = "Firebase cihaz hesabının e-posta ve şifresini gir.",
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12)
+            };
+            var saveButton = new System.Windows.Controls.Button
+            {
+                Content = "Bağlan", Width = 90, Height = 30, IsDefault = true,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            var cancelButton = new System.Windows.Controls.Button
+            {
+                Content = "Şimdilik geç", Width = 100, Height = 30, IsCancel = true
+            };
+            var buttons = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            buttons.Children.Add(saveButton);
+            buttons.Children.Add(cancelButton);
+
+            var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(20) };
+            panel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Firebase e-posta adresi" });
+            panel.Children.Add(emailBox);
+            panel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Firebase şifresi" });
+            panel.Children.Add(passwordBox);
+            panel.Children.Add(error);
+            panel.Children.Add(buttons);
+
+            var dialog = new Window
+            {
+                Title = "ZekPcSayac - Firebase bağlantısı", Content = panel,
+                Width = 340, Height = 300, ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = this,
+                ShowInTaskbar = false, Topmost = true
+            };
+
+            bool accepted = false;
+            saveButton.Click += (_, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(emailBox.Text) || string.IsNullOrEmpty(passwordBox.Password))
+                {
+                    error.Text = "E-posta ve şifre zorunludur.";
+                    return;
+                }
+                try
+                {
+                    _firebase.SaveCredentials(emailBox.Text, passwordBox.Password);
+                    accepted = true;
+                    dialog.DialogResult = true;
+                }
+                catch (Exception ex)
+                {
+                    error.Text = "Giriş bilgileri güvenli kaydedilemedi: " + ex.Message;
+                }
+            };
+            dialog.Loaded += (_, _) => emailBox.Focus();
+            dialog.ShowDialog();
+            return accepted;
+        }
+
+        private async void FirebaseTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!_firebaseReady || _firebaseBusy) return;
+            _firebaseBusy = true;
+            try
+            {
+                await _firebase.PushStateAsync(_state.RemainingSeconds, _state.IsPaused, _state.DateKey);
+            }
+            catch (Exception ex)
+            {
+                LogFirebaseError(ex);
+                _firebaseReady = false;
+                _firebaseTimer.Stop();
+            }
+            finally { _firebaseBusy = false; }
+        }
+
+        private void LogFirebaseError(Exception ex)
+        {
+            try
+            {
+                string logPath = Path.Combine(Path.GetDirectoryName(_stateFile)!, "firebase.log");
+                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n");
+            }
+            catch { }
         }
 
         private void PositionTimerWindow()
@@ -357,9 +507,9 @@ namespace ZekPcSayac
 
             // New local calendar day: renew the base allowance and discard yesterday's bonus.
             // Preserve pause state so a paused session never resumes by itself after midnight.
-            _state.BaseSeconds = InitialDailyMinutes * 60;
-            _state.BonusSeconds = 0;
-            _state.RemainingSeconds = _state.BaseSeconds;
+            _state.BaseSeconds = _configuredDailyMinutes * 60;
+            _state.BonusSeconds = _configuredBonusMinutes * 60;
+            _state.RemainingSeconds = _state.BaseSeconds + _state.BonusSeconds;
             _state.DateKey = today;
             _state.LastStartedUtc = DateTime.UtcNow;
             SaveState();
@@ -413,6 +563,7 @@ namespace ZekPcSayac
 
             _timer.Stop();
             _dailyCheckTimer.Stop();
+            _firebaseTimer.Stop();
             SaveState();
         }
 
