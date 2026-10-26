@@ -468,7 +468,6 @@ namespace ZekPcSayac
                 if (string.Equals(passwordBox.Password, ExitPassword, StringComparison.Ordinal))
                 {
                     dialog.DialogResult = true;
-                    dialog.Close();
                 }
                 else
                 {
