@@ -15,7 +15,13 @@ import {
   getDoc,
   setDoc,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  updateDoc
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -89,6 +95,7 @@ const dashboardView = $("dashboardView");
 const logoutButton = $("logoutButton");
 let stopStateListener = null;
 let stopConfigListener = null;
+let stopRequestsListener = null;
 let currentConfig = {};
 
 function setMessage(id, text, type = "") {
@@ -134,6 +141,73 @@ function renderDeviceState(state) {
 function startListeners() {
   if (stopStateListener) stopStateListener();
   if (stopConfigListener) stopConfigListener();
+  if (stopRequestsListener) stopRequestsListener();
+
+  const requestsList = $("accessRequestsList");
+  stopRequestsListener = onSnapshot(
+    query(collection(db, "accessRequests"), where("status", "==", "pending"), limit(50)),
+    (snapshot) => {
+      requestsList.replaceChildren();
+      if (snapshot.empty) {
+        requestsList.textContent = "Bekleyen yetki isteği yok.";
+        return;
+      }
+      for (const requestDoc of snapshot.docs) {
+        const request = requestDoc.data();
+        const row = document.createElement("div");
+        row.className = "request-row";
+        const details = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = request.displayName || request.email || request.uid;
+        const email = document.createElement("p");
+        email.className = "muted";
+        email.textContent = request.email || request.uid;
+        details.append(name, email);
+        const actions = document.createElement("div");
+        actions.className = "request-actions";
+        const approve = document.createElement("button");
+        approve.className = "button button-primary";
+        approve.textContent = "Yetki ver";
+        approve.addEventListener("click", async () => {
+          approve.disabled = true;
+          try {
+            await setDoc(doc(db, "admins", request.uid), {
+              role: "admin",
+              email: request.email || "",
+              displayName: request.displayName || "",
+              approvedAt: serverTimestamp()
+            });
+            await updateDoc(doc(db, "accessRequests", request.uid), {
+              status: "approved",
+              reviewedAt: serverTimestamp()
+            });
+          } catch (error) {
+            approve.disabled = false;
+            setMessage("accessRequestsMessage", friendlyError(error), "error");
+          }
+        });
+        const reject = document.createElement("button");
+        reject.className = "button button-quiet";
+        reject.textContent = "Reddet";
+        reject.addEventListener("click", async () => {
+          reject.disabled = true;
+          try {
+            await updateDoc(doc(db, "accessRequests", request.uid), {
+              status: "rejected",
+              reviewedAt: serverTimestamp()
+            });
+          } catch (error) {
+            reject.disabled = false;
+            setMessage("accessRequestsMessage", friendlyError(error), "error");
+          }
+        });
+        actions.append(approve, reject);
+        row.append(details, actions);
+        requestsList.append(row);
+      }
+    },
+    (error) => setMessage("accessRequestsMessage", friendlyError(error), "error")
+  );
 
   stopConfigListener = onSnapshot(doc(db, "deviceConfig", DEVICE_ID), (snapshot) => {
     currentConfig = snapshot.exists() ? snapshot.data() : {};
@@ -199,8 +273,10 @@ $("loginForm").addEventListener("submit", async (event) => {
 logoutButton.addEventListener("click", async () => {
   if (stopStateListener) stopStateListener();
   if (stopConfigListener) stopConfigListener();
+  if (stopRequestsListener) stopRequestsListener();
   stopStateListener = null;
   stopConfigListener = null;
+  stopRequestsListener = null;
   await signOut(auth);
 });
 
@@ -276,21 +352,40 @@ onAuthStateChanged(auth, async (user) => {
     setSignedInView(null);
     if (stopStateListener) stopStateListener();
     if (stopConfigListener) stopConfigListener();
+    if (stopRequestsListener) stopRequestsListener();
     stopStateListener = null;
     stopConfigListener = null;
+    stopRequestsListener = null;
     return;
   }
 
   try {
-    // A successful authentication alone does not grant admin access.
-    // The admins/{UID} document is the explicit allow-list.
+    // Accept either the original English collection or the existing Turkish collection.
     const adminSnapshot = await getDoc(doc(db, "admins", user.uid));
-    if (!adminSnapshot.exists()) {
+    const turkishAdminSnapshot = adminSnapshot.exists()
+      ? adminSnapshot
+      : await getDoc(doc(db, "yöneticiler", user.uid));
+
+    if (!turkishAdminSnapshot.exists()) {
+      const requestRef = doc(db, "accessRequests", user.uid);
+      const existingRequest = await getDoc(requestRef);
+      if (!existingRequest.exists() || existingRequest.data().status === "rejected") {
+        await setDoc(requestRef, {
+          uid: user.uid,
+          email: user.email || "",
+          displayName: user.displayName || "",
+          photoURL: user.photoURL || "",
+          status: "pending",
+          createdAt: serverTimestamp()
+        });
+      }
       setSignedInView(null);
       setMessage(
         "loginMessage",
-        `Giriş başarılı ancak yönetici yetkisi tanımlı değil. Bu hesabın UID'si: ${user.uid}. Firestore'da admins koleksiyonuna bu UID ile belge ekle.`,
-        "error"
+        existingRequest.exists() && existingRequest.data().status === "approved"
+          ? "Yetkin tanımlanıyor. Birkaç saniye sonra tekrar giriş yap."
+          : "Yetki isteğin gönderildi. Muhammed kendi hesabından giriş yaptığında bu isteği görüp onaylayabilir.",
+        "success"
       );
       await signOut(auth);
       return;
