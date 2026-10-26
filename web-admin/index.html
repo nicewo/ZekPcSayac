@@ -95,15 +95,23 @@
         </section>
       </div>
 
-      <section class="panel setup-panel">
-        <p class="eyebrow">İLK KURULUM</p>
-        <h3>Masaüstü cihaz hesabı</h3>
-        <p class="muted">Firebase Authentication'da masaüstü için ayrı bir kullanıcı oluşturduğunda UID değerini buraya kaydet. Yönetici hesabını masaüstü uygulamasında kullanma.</p>
-        <label for="deviceUidInput">Masaüstü kullanıcısının Auth UID'si</label>
-        <input id="deviceUidInput" type="text" autocomplete="off" placeholder="Firebase Authentication UID">
-        <button id="saveDeviceUidButton" class="button button-secondary full-width" type="button">Cihaz hesabını kaydet</button>
-        <p id="deviceUidMessage" class="message" role="status"></p>
-      </section>
+      <details class="panel setup-panel" id="deviceSetupDetails">
+        <summary class="setup-summary">
+          <span>
+            <span class="eyebrow">İLK KURULUM</span>
+            <strong>Masaüstü cihaz hesabı</strong>
+            <span class="muted setup-summary-hint">UID ayarlarını görüntüle veya değiştir</span>
+          </span>
+          <span class="setup-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="setup-content">
+          <p class="muted">Firebase Authentication'da masaüstü için ayrı bir kullanıcı kullan. Yönetici hesabını masaüstü uygulamasında kullanma.</p>
+          <label for="deviceUidInput">Masaüstü kullanıcısının Auth UID'si</label>
+          <input id="deviceUidInput" type="text" autocomplete="off" placeholder="Firebase Authentication UID">
+          <button id="saveDeviceUidButton" class="button button-secondary full-width" type="button">Cihaz hesabını kaydet</button>
+          <p id="deviceUidMessage" class="message" role="status"></p>
+        </div>
+      </details>
 
       <p class="footnote">Panel bağlantısı Firestore güvenlik kurallarıyla korunur. Masaüstü istemcisinin Firebase senkronizasyonu ayrı bir sonraki adımda eklenecek.</p>
     </section>
