@@ -142,12 +142,15 @@ function startListeners() {
   if (stopRequestsListener) stopRequestsListener();
 
   const requestsList = $("accessRequestsList");
+  const approvalPanel = requestsList.closest(".approval-panel");
+  // Bekleyen istek yoksa yönetici erişimi kartını tamamen gizle.
+  approvalPanel.classList.add("hidden");
   stopRequestsListener = onSnapshot(
     query(collection(db, "accessRequests"), where("status", "==", "pending"), limit(50)),
     (snapshot) => {
       requestsList.replaceChildren();
+      approvalPanel.classList.toggle("hidden", snapshot.empty);
       if (snapshot.empty) {
-        requestsList.textContent = "Bekleyen yetki isteği yok.";
         return;
       }
       for (const requestDoc of snapshot.docs) {
