@@ -61,6 +61,16 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #f2a23a20; }
 .grid .panel { min-width: 0; }
 .grid .muted { min-height: 40px; }
 .setup-panel { margin-top: 16px; }
+.setup-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; }
+.setup-summary::-webkit-details-marker { display: none; }
+.setup-summary > span:first-child { display: grid; gap: 5px; }
+.setup-summary .eyebrow { margin: 0; }
+.setup-summary strong { font-size: 16px; }
+.setup-summary-hint { font-size: 12px; }
+.setup-chevron { color: var(--accent); font-size: 22px; transition: transform .18s ease; }
+.setup-panel[open] .setup-chevron { transform: rotate(180deg); }
+.setup-content { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.setup-content > .muted { margin-bottom: 10px; }
 .footnote { margin: 18px 3px 0; color: #7e878e; font-size: 11px; line-height: 1.6; }
 @media (max-width: 620px) {
   .shell { width: min(100% - 22px, 480px); padding-top: 16px; }
