@@ -77,3 +77,15 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #f2a23a20; }
 #googleLoginButton { margin-top: 20px; }
 
 .install-help { margin: 14px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-raised); color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+
+.approval-panel { margin-bottom: 16px; }
+.request-list { display: grid; gap: 10px; margin-top: 14px; }
+.request-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #111416; }
+.request-row .muted { margin-top: 4px; overflow-wrap: anywhere; }
+.request-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.request-actions .button { min-height: 36px; padding: 8px 10px; }
+@media (max-width: 620px) {
+  .request-row { align-items: flex-start; flex-direction: column; }
+  .request-actions { width: 100%; }
+}
