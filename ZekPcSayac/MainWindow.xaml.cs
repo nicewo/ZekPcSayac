@@ -118,6 +118,11 @@ namespace ZekPcSayac
                 if (string.IsNullOrWhiteSpace(executablePath))
                     return;
 
+                // Do not register builds launched from any directory under a folder named "bin".
+                // This keeps Visual Studio / development builds from adding themselves to startup.
+                if (IsUnderBinDirectory(executablePath))
+                    return;
+
                 // Do not register the dotnet host if launched from a development environment.
                 if (string.Equals(Path.GetFileNameWithoutExtension(executablePath), "dotnet", StringComparison.OrdinalIgnoreCase))
                     return;
@@ -131,6 +136,20 @@ namespace ZekPcSayac
             {
                 // Startup registration is best-effort; the app remains usable if policy blocks it.
             }
+        }
+
+        private static bool IsUnderBinDirectory(string executablePath)
+        {
+            DirectoryInfo? directory = new FileInfo(executablePath).Directory;
+            while (directory is not null)
+            {
+                if (string.Equals(directory.Name, "bin", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                directory = directory.Parent;
+            }
+
+            return false;
         }
 
         private void Timer_Tick(object? sender, EventArgs e)
