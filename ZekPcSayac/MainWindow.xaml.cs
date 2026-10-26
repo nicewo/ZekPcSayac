@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 
 namespace ZekPcSayac
@@ -14,6 +15,7 @@ namespace ZekPcSayac
         private const int InitialDailyMinutes = 120;
 
         private readonly DispatcherTimer _timer;
+        private readonly DispatcherTimer _dailyCheckTimer;
         private readonly string _stateFile;
         private UsageState _state;
         private bool _audioStateCaptured;
@@ -43,12 +45,22 @@ namespace ZekPcSayac
             };
             _timer.Tick += Timer_Tick;
 
+            // This timer remains active even while usage is paused, so midnight
+            // renewal still happens without consuming usage time.
+            _dailyCheckTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(30)
+            };
+            _dailyCheckTimer.Tick += DailyCheckTimer_Tick;
+            _dailyCheckTimer.Start();
+
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            RegisterStartup();
             EnsureDailyState();
             PositionTimerWindow();
             RenderState();
@@ -74,6 +86,47 @@ namespace ZekPcSayac
             var workArea = SystemParameters.WorkArea;
             Left = workArea.Right - Width - 12;
             Top = workArea.Top + 8;
+        }
+
+        private void DailyCheckTimer_Tick(object? sender, EventArgs e)
+        {
+            string previousDate = _state.DateKey;
+            EnsureDailyState();
+
+            if (!string.Equals(previousDate, _state.DateKey, StringComparison.Ordinal))
+            {
+                RenderState();
+
+                // If the app was paused, keep the blackout active after daily renewal.
+                // If it was running, the main countdown continues with the new day's allowance.
+                if (_state.IsPaused || _state.RemainingSeconds <= 0)
+                    EnterPausedScreen();
+                else
+                    SaveState();
+            }
+        }
+
+        private void RegisterStartup()
+        {
+            try
+            {
+                string? executablePath = Environment.ProcessPath;
+                if (string.IsNullOrWhiteSpace(executablePath))
+                    return;
+
+                // Do not register the dotnet host if launched from a development environment.
+                if (string.Equals(Path.GetFileNameWithoutExtension(executablePath), "dotnet", StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                using RegistryKey? runKey = Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+
+                runKey?.SetValue("ZekPcSayac", $"\\"{executablePath}\\"");
+            }
+            catch
+            {
+                // Startup registration is best-effort; the app remains usable if policy blocks it.
+            }
         }
 
         private void Timer_Tick(object? sender, EventArgs e)
@@ -303,6 +356,7 @@ namespace ZekPcSayac
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             _timer.Stop();
+            _dailyCheckTimer.Stop();
             SaveState();
         }
 
