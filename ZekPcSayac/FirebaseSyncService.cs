@@ -116,6 +116,23 @@ internal sealed class FirebaseSyncService
             throw new HttpRequestException($"Firestore durum kaydı başarısız: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
     }
 
+    public async Task<(string? CommandId, int? RemainingSeconds)> GetRemainingCommandAsync()
+    {
+        try
+        {
+            using var state = await GetDocumentAsync($"deviceState/{DeviceId}");
+            if (!state.RootElement.TryGetProperty("fields", out var fields))
+                return (null, null);
+            string commandId = GetString(fields, "remainingCommandId");
+            int? seconds = GetNullableInt(fields, "requestedRemainingSeconds");
+            return (string.IsNullOrWhiteSpace(commandId) ? null : commandId, seconds);
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("404", StringComparison.Ordinal))
+        {
+            return (null, null);
+        }
+    }
+
     private async Task SignInAsync()
     {
         if (!string.IsNullOrWhiteSpace(_idToken) && DateTime.UtcNow < _tokenExpiresAt.AddMinutes(-2)) return;
