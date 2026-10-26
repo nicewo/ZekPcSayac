@@ -297,6 +297,31 @@ $("saveDailyButton").addEventListener("click", async () => {
   }
 });
 
+$("setRemainingButton").addEventListener("click", async () => {
+  const minutes = Number($("remainingMinutesInput").value);
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+    setMessage("remainingMessage", "0–1440 arasında tam dakika gir.", "error");
+    return;
+  }
+
+  const button = $("setRemainingButton");
+  button.disabled = true;
+  try {
+    await setDoc(doc(db, "deviceState", DEVICE_ID), {
+      requestedRemainingSeconds: minutes * 60,
+      remainingCommandId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      remainingCommandAt: serverTimestamp()
+    }, { merge: true });
+    setMessage("remainingMessage", minutes === 0
+      ? "Süre sıfırlama komutu gönderildi."
+      : `Kalan süre ${minutes} dakika olarak ayarlandı. Bilgisayar çevrimiçi olduğunda uygulanacak.`, "success");
+  } catch (error) {
+    setMessage("remainingMessage", friendlyError(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $("addBonusButton").addEventListener("click", async () => {
   const minutes = Number($("bonusInput").value);
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
