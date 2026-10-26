@@ -1,6 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#151719"/>
-  <rect x="30" y="30" width="452" height="452" rx="94" fill="#202428" stroke="#f2a23a" stroke-width="12"/>
-  <path d="M132 151h250v53L218 330h169v57H126v-53l164-126H132z" fill="#f2a23a"/>
-  <circle cx="380" cy="119" r="24" fill="#f3f4f5"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#292d31"/>
+      <stop offset=".55" stop-color="#111315"/>
+      <stop offset="1" stop-color="#050607"/>
+    </linearGradient>
+    <linearGradient id="bezel" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#555b61"/>
+      <stop offset=".35" stop-color="#171a1d"/>
+      <stop offset="1" stop-color="#34393e"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#252a2e"/>
+      <stop offset=".58" stop-color="#080a0c"/>
+      <stop offset="1" stop-color="#17130d"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2=".85" y2="1">
+      <stop offset="0" stop-color="#ffe29a"/>
+      <stop offset=".32" stop-color="#ffb52f"/>
+      <stop offset=".72" stop-color="#f27b00"/>
+      <stop offset="1" stop-color="#b94b00"/>
+    </linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#090a0b"/>
+  <rect x="15" y="15" width="482" height="482" rx="94" fill="url(#bg)" stroke="#42474b" stroke-width="2"/>
+  <ellipse cx="256" cy="420" rx="155" ry="17" fill="#f28b12" opacity=".22" filter="url(#shadow)"/>
+  <rect x="67" y="87" width="378" height="263" rx="27" fill="url(#bezel)" stroke="#687078" stroke-width="3"/>
+  <rect x="79" y="99" width="354" height="239" rx="18" fill="url(#screen)" stroke="#f39a24" stroke-width="3"/>
+  <path d="M94 114h320L98 316z" fill="#fff" opacity=".035"/>
+  <path d="M155 145h202v32L220 271h138v31H153v-31l138-94H155z" fill="#ff8a00" opacity=".22" filter="url(#shadow)"/>
+  <path d="M155 145h202v32L220 271h138v31H153v-31l138-94H155z" fill="url(#gold)" stroke="#ffd27a" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M256 350v29h-47v15h146v-15h-47v-29z" fill="url(#bezel)" stroke="#4d5358" stroke-width="2"/>
+  <rect x="178" y="392" width="156" height="15" rx="7.5" fill="url(#bezel)" stroke="#687078" stroke-width="2"/>
+  <path d="M90 348h332" stroke="#f3a23a" stroke-width="2" opacity=".75"/>
+  <circle cx="256" cy="322" r="3.5" fill="#f2a23a"/>
 </svg>
