@@ -73,6 +73,16 @@
         </div>
       </div>
 
+      <section class="panel manual-time-panel">
+        <p class="eyebrow">ANLIK KONTROL</p>
+        <h3>Kalan süreyi değiştir</h3>
+        <p class="muted">Buraya girdiğin dakika, bilgisayardaki mevcut kalan sürenin yerine geçer. Bilgisayar çevrimiçi olduğunda komut yaklaşık 15 saniye içinde uygulanır.</p>
+        <label for="remainingMinutesInput">Yeni kalan süre (dakika)</label>
+        <input id="remainingMinutesInput" type="number" min="0" max="1440" step="1" value="60">
+        <button id="setRemainingButton" class="button button-primary full-width" type="button">Kalan süreyi uygula</button>
+        <p id="remainingMessage" class="message" role="status"></p>
+      </section>
+
       <div class="grid">
         <section class="panel">
           <p class="eyebrow">GÜNLÜK HAK</p>
@@ -113,7 +123,7 @@
         </div>
       </details>
 
-      <p class="footnote">Panel bağlantısı Firestore güvenlik kurallarıyla korunur. Masaüstü istemcisinin Firebase senkronizasyonu ayrı bir sonraki adımda eklenecek.</p>
+      <p class="footnote">Panel ve masaüstü uygulaması Firebase üzerinden eşitlenir. Manuel kalan süre komutu masaüstü çevrimiçi olduğunda uygulanır.</p>
     </section>
   </main>
   <script type="module" src="./app.js"></script>
