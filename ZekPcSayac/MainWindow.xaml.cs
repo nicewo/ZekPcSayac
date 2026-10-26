@@ -44,6 +44,8 @@ namespace ZekPcSayac
 
             if (_state.IsPaused || _state.RemainingSeconds <= 0)
             {
+                _state.IsPaused = true;
+                SaveState();
                 EnterPausedScreen();
             }
             else
