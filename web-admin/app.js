@@ -30,6 +30,34 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+let deferredInstallPrompt = null;
+const installButton = document.getElementById("installButton");
+const installHelp = document.getElementById("installHelp");
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  installButton.classList.remove("hidden");
+  installButton.textContent = "Uygulamayı yükle";
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  installButton.classList.add("hidden");
+  installHelp.classList.add("hidden");
+});
+
+installButton.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) {
+    installHelp.classList.toggle("hidden");
+    return;
+  }
+
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+});
+
 const $ = (id) => document.getElementById(id);
 const loginView = $("loginView");
 const dashboardView = $("dashboardView");
