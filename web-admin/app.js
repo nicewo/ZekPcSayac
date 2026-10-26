@@ -3,6 +3,8 @@ import {
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import {
@@ -103,6 +105,8 @@ function startListeners() {
 }
 
 function friendlyError(error) {
+  if (error?.code === "auth/unauthorized-domain") return "Bu web adresi Firebase Authentication yetkili alan adlarında değil.";
+  if (error?.code === "auth/popup-blocked") return "Tarayıcı açılır pencereyi engelledi; izin verip tekrar dene.";
   if (error?.code === "auth/invalid-credential") return "E-posta veya şifre yanlış.";
   if (error?.code === "auth/too-many-requests") return "Çok fazla deneme yapıldı. Biraz sonra tekrar dene.";
   if (error?.code === "permission-denied" || error?.code === "firestore/permission-denied") {
@@ -110,6 +114,18 @@ function friendlyError(error) {
   }
   return error?.message || "Beklenmeyen bir hata oluştu.";
 }
+
+$("googleLoginButton").addEventListener("click", async () => {
+  setMessage("loginMessage", "Google ile giriş yapılıyor…");
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await signInWithPopup(auth, provider);
+    setMessage("loginMessage", "");
+  } catch (error) {
+    setMessage("loginMessage", friendlyError(error), "error");
+  }
+});
 
 $("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
