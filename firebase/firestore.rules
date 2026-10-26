@@ -1,0 +1,74 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isThisDevice(deviceId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/deviceConfig/$(deviceId))
+        && get(/databases/$(database)/documents/deviceConfig/$(deviceId)).data.deviceAuthUid == request.auth.uid;
+    }
+
+    // Admin membership documents are created manually in the Firebase Console.
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update, delete: if false;
+    }
+
+    // Admin-managed settings: the desktop client may read but must not change these.
+    match /deviceConfig/{deviceId} {
+      allow read: if isAdmin() || isThisDevice(deviceId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Runtime state reported by the desktop client.
+    match /deviceState/{deviceId} {
+      allow read: if isAdmin() || isThisDevice(deviceId);
+
+      allow create: if isAdmin() || (
+        isThisDevice(deviceId)
+        && request.resource.data.keys().hasOnly([
+          'remainingSeconds',
+          'isPaused',
+          'dateKey',
+          'lastSeenAt',
+          'updatedAt',
+          'clientVersion'
+        ])
+        && request.resource.data.remainingSeconds is int
+        && request.resource.data.remainingSeconds >= 0
+        && request.resource.data.isPaused is bool
+      );
+
+      allow update: if isAdmin() || (
+        isThisDevice(deviceId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'remainingSeconds',
+          'isPaused',
+          'dateKey',
+          'lastSeenAt',
+          'updatedAt',
+          'clientVersion'
+        ])
+        && request.resource.data.remainingSeconds is int
+        && request.resource.data.remainingSeconds >= 0
+        && request.resource.data.isPaused is bool
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Deny access to all documents not explicitly allowed above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
