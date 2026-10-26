@@ -99,3 +99,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #f2a23a20; }
   .request-row { align-items: flex-start; flex-direction: column; }
   .request-actions { width: 100%; }
 }
+
+
+.manual-time-panel {
+  margin-top: 16px;
+}
