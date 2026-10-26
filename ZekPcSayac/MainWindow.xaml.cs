@@ -20,6 +20,8 @@ namespace ZekPcSayac
         private UsageState _state;
         private bool _audioStateCaptured;
         private bool _wasMutedBeforePause;
+        private bool _allowClose;
+        private const string ExitPassword = "682543";
 
         [DllImport("user32.dll", SetLastError = false)]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -379,9 +381,110 @@ namespace ZekPcSayac
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (!_allowClose)
+            {
+                e.Cancel = true;
+                RequestCloseWithPassword();
+                return;
+            }
+
             _timer.Stop();
             _dailyCheckTimer.Stop();
             SaveState();
+        }
+
+        private void RequestCloseWithPassword()
+        {
+            var passwordBox = new System.Windows.Controls.PasswordBox
+            {
+                Width = 220,
+                Margin = new Thickness(0, 10, 0, 12),
+                FontSize = 18,
+                MaxLength = 20
+            };
+
+            var message = new System.Windows.Controls.TextBlock
+            {
+                Text = "Uygulamadan çıkmak için şifreyi girin:",
+                FontSize = 14,
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            var errorText = new System.Windows.Controls.TextBlock
+            {
+                Text = "",
+                Foreground = System.Windows.Media.Brushes.IndianRed,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+
+            var exitButton = new System.Windows.Controls.Button
+            {
+                Content = "Çıkış",
+                Width = 90,
+                Height = 30,
+                IsDefault = true,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            var cancelButton = new System.Windows.Controls.Button
+            {
+                Content = "Vazgeç",
+                Width = 90,
+                Height = 30,
+                IsCancel = true
+            };
+
+            var buttons = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            buttons.Children.Add(exitButton);
+            buttons.Children.Add(cancelButton);
+
+            var panel = new System.Windows.Controls.StackPanel
+            {
+                Margin = new Thickness(20)
+            };
+            panel.Children.Add(message);
+            panel.Children.Add(passwordBox);
+            panel.Children.Add(errorText);
+            panel.Children.Add(buttons);
+
+            var dialog = new Window
+            {
+                Title = "ZekPcSayac - Çıkış onayı",
+                Content = panel,
+                Width = 330,
+                Height = 190,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ShowInTaskbar = false,
+                Topmost = true
+            };
+
+            exitButton.Click += (_, _) =>
+            {
+                if (string.Equals(passwordBox.Password, ExitPassword, StringComparison.Ordinal))
+                {
+                    dialog.DialogResult = true;
+                    dialog.Close();
+                }
+                else
+                {
+                    errorText.Text = "Şifre yanlış.";
+                    passwordBox.Clear();
+                    passwordBox.Focus();
+                }
+            };
+
+            dialog.Loaded += (_, _) => passwordBox.Focus();
+            bool? result = dialog.ShowDialog();
+            if (result == true)
+            {
+                _allowClose = true;
+                Close();
+            }
         }
 
         private sealed class UsageState
