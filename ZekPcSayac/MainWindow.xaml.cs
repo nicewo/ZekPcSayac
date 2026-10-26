@@ -3,6 +3,8 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using System.Runtime.InteropServices;
+using NAudio.CoreAudioApi;
 
 namespace ZekPcSayac
 {
@@ -14,6 +16,14 @@ namespace ZekPcSayac
         private readonly DispatcherTimer _timer;
         private readonly string _stateFile;
         private UsageState _state;
+        private bool _audioStateCaptured;
+        private bool _wasMutedBeforePause;
+
+        [DllImport("user32.dll", SetLastError = false)]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        private const byte VkMediaPlayPause = 0xB3;
+        private const uint KeyeventfKeyup = 0x0002;
 
         public MainWindow()
         {
@@ -45,6 +55,8 @@ namespace ZekPcSayac
             if (_state.IsPaused || _state.RemainingSeconds <= 0)
             {
                 _state.IsPaused = true;
+                if (_state.AudioWasMutedByApp)
+                    SetSystemMute(true);
                 SaveState();
                 EnterPausedScreen();
             }
@@ -94,6 +106,8 @@ namespace ZekPcSayac
         private void PauseUsage()
         {
             _timer.Stop();
+            CaptureAndMuteAudio();
+            TryPauseMedia();
             _state.IsPaused = true;
             SaveState();
             EnterPausedScreen();
@@ -107,6 +121,7 @@ namespace ZekPcSayac
                 return;
             }
 
+            RestoreAudio();
             _state.IsPaused = false;
             _state.LastStartedUtc = DateTime.UtcNow;
             SaveState();
@@ -136,6 +151,64 @@ namespace ZekPcSayac
             WindowState = WindowState.Maximized;
             Topmost = true;
             RenderState();
+        }
+
+        private void CaptureAndMuteAudio()
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                _wasMutedBeforePause = device.AudioEndpointVolume.Mute;
+                _audioStateCaptured = true;
+                _state.AudioWasMutedBeforePause = _wasMutedBeforePause;
+                _state.AudioWasMutedByApp = !_wasMutedBeforePause;
+                device.AudioEndpointVolume.Mute = true;
+            }
+            catch
+            {
+                // Audio control is best-effort; the pause overlay still works.
+            }
+        }
+
+        private void RestoreAudio()
+        {
+            if (!_state.AudioWasMutedByApp)
+                return;
+
+            SetSystemMute(_state.AudioWasMutedBeforePause);
+            _state.AudioWasMutedByApp = false;
+            _audioStateCaptured = false;
+            SaveState();
+        }
+
+        private static void SetSystemMute(bool muted)
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                device.AudioEndpointVolume.Mute = muted;
+            }
+            catch
+            {
+                // Audio endpoint may be unavailable or permissions may block access.
+            }
+        }
+
+        private static void TryPauseMedia()
+        {
+            try
+            {
+                // Sends the standard media Play/Pause key. Apps that support media keys
+                // may pause playback; Windows cannot guarantee every app will respond.
+                keybd_event(VkMediaPlayPause, 0, 0, UIntPtr.Zero);
+                keybd_event(VkMediaPlayPause, 0, KeyeventfKeyup, UIntPtr.Zero);
+            }
+            catch
+            {
+                // Media control is best-effort.
+            }
         }
 
         private void ShutdownButton_Click(object sender, RoutedEventArgs e)
@@ -218,6 +291,8 @@ namespace ZekPcSayac
             public bool IsPaused { get; set; }
             public DateTime LastStartedUtc { get; set; }
             public string DateKey { get; set; } = "";
+            public bool AudioWasMutedBeforePause { get; set; }
+            public bool AudioWasMutedByApp { get; set; }
         }
     }
 }
