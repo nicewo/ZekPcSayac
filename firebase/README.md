@@ -76,3 +76,19 @@ Bu komut `firebase/firestore.rules` kurallarını ve `web-admin` klasöründeki 
 - Admin erişimi, yalnızca `admins/{UID}` belgesi bulunan kullanıcıya verilir. Bu belgeyi Console üzerinden elle oluştur; kurallar istemciden bu belgeyi oluşturmayı engeller.
 - Firestore kuralları değiştirilmiş bir istemcinin yerel kalan süreyi sahte raporlamasını bütünüyle engelleyemez. Bu ev içi kullanım kontrolü uygulamasıdır, Windows güvenlik sınırı değildir.
 - Web paneli başlangıç sürümüdür. WPF istemcisi henüz Firestore'a bağlanmıyor; gerçek senkronizasyon ve çevrimdışı davranış sonraki adımda eklenecek.
+
+
+## Telefon uygulaması olarak yükleme (PWA)
+
+`web-admin/manifest.json`, `web-admin/sw.js` ve `web-admin/icons/zekpcsayac.svg` dosyaları yüklenebilir web uygulaması desteğini sağlar.
+
+Panel güncellendikten sonra repo klasöründe:
+
+```powershell
+firebase deploy --only hosting
+```
+
+- Android/Chrome: paneli açıp **Uygulamayı yükle** düğmesine bas. Tarayıcı destekliyorsa yükleme penceresi açılır.
+- iPhone/Safari: paneli aç, Paylaş menüsüne bas ve **Ana Ekrana Ekle** seçeneğini kullan. Tarayıcı, uygulama içi yükleme penceresini desteklemiyorsa panel bu yönergeyi gösterir.
+- Uygulama simgesi antrasit zemin ve turuncu Z işaretidir.
+- Service worker panel dosyalarının bir kopyasını önbelleğe alır; Firebase verileri ve giriş işlemleri için internet bağlantısı gerekir.
