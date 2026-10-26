@@ -113,7 +113,8 @@ namespace ZekPcSayac
                 catch (Exception ex)
                 {
                     LogFirebaseError(ex);
-                    _firebase.ClearCredentials();
+                    if (ex.Message.StartsWith("Firebase girişi başarısız", StringComparison.Ordinal))
+                        _firebase.ClearCredentials();
                     MessageBox.Show("Firebase bağlantısı kurulamadı. Uygulama yerel sayaçla çalışmaya devam edecek.\n\n" + ex.Message,
                         "Firebase bağlantı hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
