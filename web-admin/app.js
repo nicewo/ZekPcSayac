@@ -5,6 +5,8 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import {
@@ -34,8 +36,24 @@ let deferredInstallPrompt = null;
 const installButton = document.getElementById("installButton");
 const installHelp = document.getElementById("installHelp");
 
+function isInstalledApp() {
+  return window.matchMedia("(display-mode: standalone)").matches
+    || window.matchMedia("(display-mode: fullscreen)").matches
+    || window.navigator.standalone === true;
+}
+
+function hideInstallControls() {
+  installButton.classList.add("hidden");
+  installHelp.classList.add("hidden");
+}
+
+if (isInstalledApp()) {
+  hideInstallControls();
+}
+
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
+  if (isInstalledApp()) return;
   deferredInstallPrompt = event;
   installButton.classList.remove("hidden");
   installButton.textContent = "Uygulamayı yükle";
@@ -43,11 +61,18 @@ window.addEventListener("beforeinstallprompt", (event) => {
 
 window.addEventListener("appinstalled", () => {
   deferredInstallPrompt = null;
-  installButton.classList.add("hidden");
-  installHelp.classList.add("hidden");
+  hideInstallControls();
+});
+
+window.matchMedia("(display-mode: standalone)").addEventListener?.("change", (event) => {
+  if (event.matches || isInstalledApp()) hideInstallControls();
 });
 
 installButton.addEventListener("click", async () => {
+  if (isInstalledApp()) {
+    hideInstallControls();
+    return;
+  }
   if (!deferredInstallPrompt) {
     installHelp.classList.toggle("hidden");
     return;
@@ -148,6 +173,11 @@ $("googleLoginButton").addEventListener("click", async () => {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
+    // Mobile browsers and installed PWAs behave more reliably with a full-page redirect.
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      await signInWithRedirect(auth, provider);
+      return;
+    }
     await signInWithPopup(auth, provider);
     setMessage("loginMessage", "");
   } catch (error) {
@@ -234,6 +264,11 @@ $("saveDeviceUidButton").addEventListener("click", async () => {
   } catch (error) {
     setMessage("deviceUidMessage", friendlyError(error), "error");
   }
+});
+
+// Process any pending Google redirect result and show a useful error if it failed.
+getRedirectResult(auth).catch((error) => {
+  setMessage("loginMessage", friendlyError(error), "error");
 });
 
 onAuthStateChanged(auth, async (user) => {
