@@ -106,7 +106,7 @@ namespace ZekPcSayac
             }
         }
 
-        private void RegisterStartup()
+        private static void RegisterStartup()
         {
             try
             {
@@ -129,7 +129,6 @@ namespace ZekPcSayac
 
                 using RegistryKey? runKey = Registry.CurrentUser.OpenSubKey(
                     @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
-
                 runKey?.SetValue("ZekPcSayac", $"\\"{executablePath}\\"");
             }
             catch
