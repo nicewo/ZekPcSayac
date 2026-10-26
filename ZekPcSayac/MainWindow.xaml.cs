@@ -215,6 +215,29 @@ namespace ZekPcSayac
             _firebaseBusy = true;
             try
             {
+                var command = await _firebase.GetRemainingCommandAsync();
+                if (!string.IsNullOrWhiteSpace(command.CommandId)
+                    && command.RemainingSeconds.HasValue
+                    && !string.Equals(command.CommandId, _state.LastAppliedRemainingCommandId, StringComparison.Ordinal))
+                {
+                    _state.RemainingSeconds = Math.Clamp(command.RemainingSeconds.Value, 0, 86400);
+                    _state.LastAppliedRemainingCommandId = command.CommandId;
+                    if (_state.RemainingSeconds == 0)
+                    {
+                        _state.IsPaused = true;
+                        CaptureAndMuteAudio();
+                        TryPauseMedia();
+                        EnterPausedScreen();
+                    }
+                    else
+                    {
+                        RenderState();
+                        if (!_state.IsPaused)
+                            _timer.Start();
+                    }
+                    SaveState();
+                }
+
                 await _firebase.PushStateAsync(_state.RemainingSeconds, _state.IsPaused, _state.DateKey);
             }
             catch (Exception ex)
@@ -669,6 +692,7 @@ namespace ZekPcSayac
             public bool IsPaused { get; set; }
             public DateTime LastStartedUtc { get; set; }
             public string DateKey { get; set; } = "";
+            public string LastAppliedRemainingCommandId { get; set; } = "";
             public bool AudioWasMutedBeforePause { get; set; }
             public bool AudioWasMutedByApp { get; set; }
         }
