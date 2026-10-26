@@ -106,7 +106,12 @@ internal sealed class FirebaseSyncService
             }
         };
         string url = $"https://firestore.googleapis.com/v1/projects/{ProjectId}/databases/(default)/documents/deviceState/{DeviceId}?updateMask.fieldPaths=remainingSeconds&updateMask.fieldPaths=isPaused&updateMask.fieldPaths=dateKey&updateMask.fieldPaths=lastSeenAt&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=clientVersion";
-        using var response = await Http.PatchAsync(url, JsonContent.Create(body));
+        using var request = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _idToken);
+        using var response = await Http.SendAsync(request);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Firestore durum kaydı başarısız: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
     }
