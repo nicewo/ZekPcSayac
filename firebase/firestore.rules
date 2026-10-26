@@ -25,7 +25,8 @@ service cloud.firestore {
 
     // Admin-managed settings: the desktop client may read but must not change these.
     match /deviceConfig/{deviceId} {
-      allow read: if isAdmin() || isThisDevice(deviceId);
+      // On this document, check resource.data directly to avoid a self-referential get().
+      allow read: if isAdmin() || (signedIn() && resource.data.deviceAuthUid == request.auth.uid);
       allow create, update, delete: if isAdmin();
     }
 
