@@ -360,13 +360,12 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   try {
-    // Accept either the original English collection or the existing Turkish collection.
+    // The original owner is explicitly trusted in Firestore rules.
+    // Other admins are approved through documents in the ASCII-named admins collection.
     const adminSnapshot = await getDoc(doc(db, "admins", user.uid));
-    const turkishAdminSnapshot = adminSnapshot.exists()
-      ? adminSnapshot
-      : await getDoc(doc(db, "yöneticiler", user.uid));
+    const isOwner = user.uid === "XkpxI8WALiaICxZek9gI9ka7Pd22";
 
-    if (!turkishAdminSnapshot.exists()) {
+    if (!adminSnapshot.exists() && !isOwner) {
       const requestRef = doc(db, "accessRequests", user.uid);
       const existingRequest = await getDoc(requestRef);
       if (!existingRequest.exists() || existingRequest.data().status === "rejected") {
