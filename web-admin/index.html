@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151719">
+  <title>ZekPcSayac Yönetim</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand-mark">Z</div>
+      <div>
+        <h1>ZekPcSayac</h1>
+        <p>Bilgisayar kullanım yönetimi</p>
+      </div>
+      <button id="logoutButton" class="button button-quiet hidden" type="button">Çıkış</button>
+    </header>
+
+    <section id="loginView" class="panel login-panel">
+      <p class="eyebrow">YÖNETİCİ GİRİŞİ</p>
+      <h2>Hoş geldin</h2>
+      <p class="muted">Devam etmek için yönetici hesabınla giriş yap.</p>
+      <form id="loginForm">
+        <label for="emailInput">E-posta</label>
+        <input id="emailInput" type="email" autocomplete="username" required>
+        <label for="passwordInput">Şifre</label>
+        <input id="passwordInput" type="password" autocomplete="current-password" required>
+        <button class="button button-primary full-width" type="submit">Giriş yap</button>
+      </form>
+      <p id="loginMessage" class="message" role="status"></p>
+    </section>
+
+    <section id="dashboardView" class="hidden">
+      <div class="welcome-row">
+        <div>
+          <p class="eyebrow">KONTROL PANELİ</p>
+          <h2>Bilgisayar ayarları</h2>
+        </div>
+        <span id="connectionBadge" class="status-badge">Bağlanıyor…</span>
+      </div>
+
+      <div class="device-card panel">
+        <div class="device-icon">PC</div>
+        <div class="device-copy">
+          <h3>Zekeriya'nın bilgisayarı</h3>
+          <p id="deviceStatus" class="muted">Durum yükleniyor…</p>
+        </div>
+        <div class="remaining-block">
+          <span class="muted">Son bildirilen kalan süre</span>
+          <strong id="remainingTime">--:--:--</strong>
+        </div>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <p class="eyebrow">GÜNLÜK HAK</p>
+          <h3>Günlük kullanım süresi</h3>
+          <p class="muted">Her yeni gün için verilen ana süre.</p>
+          <label for="dailyLimitInput">Dakika</label>
+          <input id="dailyLimitInput" type="number" min="0" max="1440" step="5" value="120">
+          <button id="saveDailyButton" class="button button-primary full-width" type="button">Günlük süreyi kaydet</button>
+          <p id="dailyMessage" class="message" role="status"></p>
+        </section>
+
+        <section class="panel">
+          <p class="eyebrow">EK SÜRE</p>
+          <h3>Bugüne ek süre ver</h3>
+          <p class="muted">Yalnızca bugünün kullanım hakkına eklenir.</p>
+          <label for="bonusInput">Eklenecek dakika</label>
+          <input id="bonusInput" type="number" min="1" max="1440" step="5" value="15">
+          <button id="addBonusButton" class="button button-accent full-width" type="button">Ek süre ver</button>
+          <p id="bonusMessage" class="message" role="status"></p>
+        </section>
+      </div>
+
+      <section class="panel setup-panel">
+        <p class="eyebrow">İLK KURULUM</p>
+        <h3>Masaüstü cihaz hesabı</h3>
+        <p class="muted">Firebase Authentication'da masaüstü için ayrı bir kullanıcı oluşturduğunda UID değerini buraya kaydet. Yönetici hesabını masaüstü uygulamasında kullanma.</p>
+        <label for="deviceUidInput">Masaüstü kullanıcısının Auth UID'si</label>
+        <input id="deviceUidInput" type="text" autocomplete="off" placeholder="Firebase Authentication UID">
+        <button id="saveDeviceUidButton" class="button button-secondary full-width" type="button">Cihaz hesabını kaydet</button>
+        <p id="deviceUidMessage" class="message" role="status"></p>
+      </section>
+
+      <p class="footnote">Panel bağlantısı Firestore güvenlik kurallarıyla korunur. Masaüstü istemcisinin Firebase senkronizasyonu ayrı bir sonraki adımda eklenecek.</p>
+    </section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
