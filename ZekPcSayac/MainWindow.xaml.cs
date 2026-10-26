@@ -21,6 +21,7 @@ namespace ZekPcSayac
         private bool _audioStateCaptured;
         private bool _wasMutedBeforePause;
         private bool _allowClose;
+        private bool _closePromptOpen;
         private const string ExitPassword = "682543";
 
         [DllImport("user32.dll", SetLastError = false)]
@@ -384,7 +385,25 @@ namespace ZekPcSayac
             if (!_allowClose)
             {
                 e.Cancel = true;
-                RequestCloseWithPassword();
+
+                // Do not show a modal dialog synchronously inside the Closing event.
+                // WPF is still processing the close request at this point.
+                if (!_closePromptOpen)
+                {
+                    _closePromptOpen = true;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            RequestCloseWithPassword();
+                        }
+                        finally
+                        {
+                            _closePromptOpen = false;
+                        }
+                    }), DispatcherPriority.Background);
+                }
+
                 return;
             }
 
