@@ -71,3 +71,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #f2a23a20; }
   .remaining-block { width: 100%; align-items: flex-start; padding-left: 62px; text-align: left; }
   .welcome-row { align-items: flex-start; }
 }
+
+.login-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0 0; color: var(--muted); font-size: 11px; }
+.login-divider::before, .login-divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
+#googleLoginButton { margin-top: 20px; }
