@@ -407,6 +407,10 @@ namespace ZekPcSayac
                 return;
             }
 
+            // If the app muted system audio while pausing, restore the prior mute state
+            // before exiting so Windows audio is not left muted after the app closes.
+            RestoreAudio();
+
             _timer.Stop();
             _dailyCheckTimer.Stop();
             SaveState();
