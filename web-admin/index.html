@@ -119,7 +119,23 @@
   <script type="module" src="./app.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error));
+      window.addEventListener("load", async () => {
+        try {
+          const registration = await navigator.serviceWorker.register("./sw.js", {
+            updateViaCache: "none"
+          });
+          // Check for a newer worker whenever the installed web app opens.
+          await registration.update();
+          let reloadingForWorker = false;
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (reloadingForWorker) return;
+            reloadingForWorker = true;
+            window.location.reload();
+          });
+        } catch (error) {
+          console.error("Service worker update failed:", error);
+        }
+      });
     }
   </script>
 </body>
