@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "ZekPcSayac Yönetim",
+  "short_name": "ZekPcSayac",
+  "description": "Bilgisayar kullanım süresini yönet",
+  "lang": "tr-TR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#101214",
+  "theme_color": "#151719",
+  "icons": [
+    {
+      "src": "./icons/zekpcsayac.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
