@@ -110,6 +110,10 @@ namespace ZekPcSayac
         {
             try
             {
+                // Never register a temporary development/debug executable in Windows startup.
+                if (System.Diagnostics.Debugger.IsAttached)
+                    return;
+
                 string? executablePath = Environment.ProcessPath;
                 if (string.IsNullOrWhiteSpace(executablePath))
                     return;
@@ -141,6 +145,8 @@ namespace ZekPcSayac
             if (_state.RemainingSeconds <= 0)
             {
                 _state.RemainingSeconds = 0;
+                CaptureAndMuteAudio();
+                TryPauseMedia();
                 _state.IsPaused = true;
                 SaveState();
                 EnterPausedScreen();
