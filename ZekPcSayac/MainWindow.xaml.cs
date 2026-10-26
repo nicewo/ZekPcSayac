@@ -49,6 +49,7 @@ namespace ZekPcSayac
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            EnsureDailyState();
             PositionTimerWindow();
             RenderState();
 
@@ -77,6 +78,8 @@ namespace ZekPcSayac
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
+            EnsureDailyState();
+
             if (_state.RemainingSeconds > 0)
                 _state.RemainingSeconds--;
 
@@ -257,11 +260,29 @@ namespace ZekPcSayac
 
             return new UsageState
             {
+                BaseSeconds = InitialDailyMinutes * 60,
+                BonusSeconds = 0,
                 RemainingSeconds = InitialDailyMinutes * 60,
                 IsPaused = false,
                 LastStartedUtc = DateTime.UtcNow,
                 DateKey = DateTime.Now.ToString("yyyy-MM-dd")
             };
+        }
+
+        private void EnsureDailyState()
+        {
+            string today = DateTime.Now.ToString("yyyy-MM-dd");
+            if (string.Equals(_state.DateKey, today, StringComparison.Ordinal))
+                return;
+
+            // New local calendar day: renew the base allowance and discard yesterday's bonus.
+            // Preserve pause state so a paused session never resumes by itself after midnight.
+            _state.BaseSeconds = InitialDailyMinutes * 60;
+            _state.BonusSeconds = 0;
+            _state.RemainingSeconds = _state.BaseSeconds;
+            _state.DateKey = today;
+            _state.LastStartedUtc = DateTime.UtcNow;
+            SaveState();
         }
 
         private void SaveState()
@@ -287,6 +308,8 @@ namespace ZekPcSayac
 
         private sealed class UsageState
         {
+            public int BaseSeconds { get; set; }
+            public int BonusSeconds { get; set; }
             public int RemainingSeconds { get; set; }
             public bool IsPaused { get; set; }
             public DateTime LastStartedUtc { get; set; }
