@@ -39,12 +39,12 @@ Tarih alanları `yyyy-MM-dd` biçiminde yerel tarih metnidir. `lastSeenAt` ve `u
 ## Firebase Console kurulumu
 
 1. Proje: `zekpcsayac`.
-2. Authentication > Sign-in method bölümünde **Email/Password** etkin olmalı.
-3. Authentication > Users bölümünde bir yönetici kullanıcı oluştur.
-4. Yönetici UID'sini kopyala. Firestore Data ekranında `admins` koleksiyonu ve UID ile aynı belgeyi oluştur; örneğin `{"role":"admin"}`.
-5. Authentication > Users bölümünde masaüstü için ayrı bir kullanıcı oluştur. Yönetici parolasını masaüstü uygulamasına koyma.
-6. Masaüstü kullanıcı UID'sini kopyala. Paneldeki “Masaüstü cihaz hesabı” alanından kaydedebilirsin.
-7. Yönetici hesabıyla web paneline giriş yapmadan önce Firestore kurallarını yayımla. Ardından panelden günlük süre ve ek süre ayarlanabilir.
+2. Authentication > Sign-in method bölümünde **Email/Password** ve **Google** sağlayıcılarını etkinleştir. Google sağlayıcısında destek e-postasını seçip kaydet.
+3. Yönetim panelinde Google ile ilk kez giriş yap. Hesap henüz yetkili değilse panel UID değerini hata mesajında gösterir.
+4. Firestore Data ekranında `admins` koleksiyonunda, gösterilen UID ile aynı ID'ye sahip belge oluştur; örneğin `{"role":"admin"}`. Aynı işlemi yönetici olacak ikinci Google hesabı için de tekrarla.
+5. Authentication > Users bölümünde masaüstü için ayrı bir Email/Password kullanıcısı oluştur. Yönetici parolasını masaüstü uygulamasına koyma.
+6. Masaüstü kullanıcı UID'sini kopyala. Yönetici panelindeki “Masaüstü cihaz hesabı” alanından kaydet.
+7. Firestore kurallarını ve Hosting'i yayımla. Yetkili Google hesapları daha sonra günlük süre ve ek süre ayarlayabilir.
 
 ## Kuralları ve web panelini yayımlama
 
