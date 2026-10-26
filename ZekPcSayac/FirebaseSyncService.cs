@@ -19,6 +19,7 @@ internal sealed class FirebaseSyncService
     private string? _password;
     private string? _uid;
     private string? _idToken;
+    private DateTime _tokenExpiresAt = DateTime.MinValue;
 
     public FirebaseSyncService(string appDirectory)
     {
@@ -38,6 +39,16 @@ internal sealed class FirebaseSyncService
         System.IO.File.WriteAllBytes(_credentialPath, protectedBytes);
         CryptographicOperations.ZeroMemory(bytes);
         _idToken = null;
+        _tokenExpiresAt = DateTime.MinValue;
+    }
+
+    public void ClearCredentials()
+    {
+        _email = null;
+        _password = null;
+        _idToken = null;
+        _tokenExpiresAt = DateTime.MinValue;
+        try { if (System.IO.File.Exists(_credentialPath)) System.IO.File.Delete(_credentialPath); } catch { }
     }
 
     public async Task<FirebaseSnapshot> ConnectAndReadAsync()
@@ -102,6 +113,7 @@ internal sealed class FirebaseSyncService
 
     private async Task SignInAsync()
     {
+        if (!string.IsNullOrWhiteSpace(_idToken) && DateTime.UtcNow < _tokenExpiresAt.AddMinutes(-2)) return;
         if (!HasCredentials)
             throw new InvalidOperationException("Firebase giriş bilgileri girilmemiş.");
         var response = await Http.PostAsJsonAsync(
@@ -113,6 +125,10 @@ internal sealed class FirebaseSyncService
         using var doc = JsonDocument.Parse(json);
         _idToken = doc.RootElement.GetProperty("idToken").GetString();
         _uid = doc.RootElement.GetProperty("localId").GetString();
+        int expiresIn = 3600;
+        if (doc.RootElement.TryGetProperty("expiresIn", out var expiresElement))
+            int.TryParse(expiresElement.GetString(), out expiresIn);
+        _tokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn > 0 ? expiresIn : 3600);
     }
 
     private async Task<JsonDocument> GetDocumentAsync(string path)
