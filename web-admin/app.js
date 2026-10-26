@@ -5,8 +5,6 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import {
@@ -247,11 +245,8 @@ $("googleLoginButton").addEventListener("click", async () => {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    // Mobile browsers and installed PWAs behave more reliably with a full-page redirect.
-    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      await signInWithRedirect(auth, provider);
-      return;
-    }
+    // Use popup on all platforms to avoid mobile redirect flows failing
+    // when browsers restrict cross-site storage for firebaseapp.com.
     await signInWithPopup(auth, provider);
     setMessage("loginMessage", "");
   } catch (error) {
@@ -340,11 +335,6 @@ $("saveDeviceUidButton").addEventListener("click", async () => {
   } catch (error) {
     setMessage("deviceUidMessage", friendlyError(error), "error");
   }
-});
-
-// Process any pending Google redirect result and show a useful error if it failed.
-getRedirectResult(auth).catch((error) => {
-  setMessage("loginMessage", friendlyError(error), "error");
 });
 
 onAuthStateChanged(auth, async (user) => {
