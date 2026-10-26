@@ -85,9 +85,6 @@ function startListeners() {
     if (Number.isFinite(currentConfig.dailyLimitMinutes)) {
       $("dailyLimitInput").value = currentConfig.dailyLimitMinutes;
     }
-    if (Number.isFinite(currentConfig.bonusMinutes)) {
-      $("bonusInput").value = currentConfig.bonusMinutes || 15;
-    }
     $("deviceUidInput").value = currentConfig.deviceAuthUid || "";
     $("connectionBadge").textContent = "Firebase bağlı";
     $("connectionBadge").classList.add("online");
@@ -143,7 +140,7 @@ $("saveDailyButton").addEventListener("click", async () => {
   try {
     await setDoc(doc(db, "deviceConfig", DEVICE_ID), {
       dailyLimitMinutes: minutes,
-      configDateKey: todayKey(),
+      dailyLimitUpdatedAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     }, { merge: true });
     setMessage("dailyMessage", "Günlük süre kaydedildi. Masaüstü senkronizasyonu henüz eklenmedi.", "success");
@@ -163,11 +160,11 @@ $("addBonusButton").addEventListener("click", async () => {
     const ref = doc(db, "deviceConfig", DEVICE_ID);
     const snapshot = await getDoc(ref);
     const existing = snapshot.exists() ? snapshot.data() : {};
-    const isToday = existing.configDateKey === todayKey();
+    const isToday = existing.bonusDateKey === todayKey();
     const currentBonus = isToday && Number.isFinite(existing.bonusMinutes) ? existing.bonusMinutes : 0;
     await setDoc(ref, {
       bonusMinutes: currentBonus + minutes,
-      configDateKey: todayKey(),
+      bonusDateKey: todayKey(),
       updatedAt: serverTimestamp()
     }, { merge: true });
     $("bonusInput").value = "15";
