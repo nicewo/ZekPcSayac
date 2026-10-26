@@ -4,6 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#151719">
+  <meta name="description" content="ZekPcSayac bilgisayar kullanım yönetim paneli">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ZekPcSayac">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icons/zekpcsayac.svg">
+  <link rel="apple-touch-icon" href="./icons/zekpcsayac.svg">
   <title>ZekPcSayac Yönetim</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -15,6 +23,7 @@
         <h1>ZekPcSayac</h1>
         <p>Bilgisayar kullanım yönetimi</p>
       </div>
+      <button id="installButton" class="button button-accent" type="button">Uygulamayı yükle</button>
       <button id="logoutButton" class="button button-quiet hidden" type="button">Çıkış</button>
     </header>
 
@@ -32,6 +41,7 @@
         <button class="button button-primary full-width" type="submit">Giriş yap</button>
       </form>
       <p id="loginMessage" class="message" role="status"></p>
+      <p id="installHelp" class="install-help hidden">Yüklemek için tarayıcı menüsünü açıp “Ana ekrana ekle” veya “Uygulamayı yükle” seçeneğini kullan.</p>
     </section>
 
     <section id="dashboardView" class="hidden">
@@ -91,5 +101,10 @@
     </section>
   </main>
   <script type="module" src="./app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error));
+    }
+  </script>
 </body>
 </html>
