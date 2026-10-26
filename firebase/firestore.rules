@@ -8,8 +8,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        || exists(/databases/$(database)/documents/yöneticiler/$(request.auth.uid))
+        request.auth.uid == "XkpxI8WALiaICxZek9gI9ka7Pd22"
+        || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
@@ -22,12 +22,6 @@ service cloud.firestore {
     // Admin membership documents are created manually in the Firebase Console.
     match /admins/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
-      allow create, update, delete: if isAdmin();
-    }
-
-    // Existing Turkish-named admin collection, if already created in the console.
-    match /yöneticiler/{uid} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow create, update, delete: if isAdmin();
     }
 
