@@ -7,8 +7,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return signedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        || exists(/databases/$(database)/documents/yöneticiler/$(request.auth.uid))
+      );
     }
 
     function isThisDevice(deviceId) {
@@ -20,7 +22,26 @@ service cloud.firestore {
     // Admin membership documents are created manually in the Firebase Console.
     match /admins/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
-      allow create, update, delete: if false;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Existing Turkish-named admin collection, if already created in the console.
+    match /yöneticiler/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // A signed-in user can request admin access for their own UID.
+    match /accessRequests/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'photoURL', 'status', 'createdAt'
+        ]);
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow update, delete: if isAdmin();
     }
 
     // Admin-managed settings: the desktop client may read but must not change these.
