@@ -16,4 +16,4 @@ The app signs in with the Firebase **device account** (email/password), reads th
 
 On first launch, enter the device account's email and password in the Firebase connection dialog. Do not use the administrator's account unless that account's UID is explicitly assigned as the device UID.
 
-The app currently imports the remote remaining time when it starts, then writes the live remaining time, pause status, date key, last-seen timestamp and client version about every 15 seconds. Editing the remaining time from the web panel is a separate next step; this version does not yet poll for manual remaining-time overrides.
+The app imports the remote remaining time when it starts, then writes the live remaining time, pause status, date key, last-seen timestamp and client version about every 15 seconds. It also checks for administrator changes about every 15 seconds. A new daily limit is used at the next daily renewal; bonus minutes granted for today are added to the current remaining time. Manual remaining-time commands from the web panel are polled and applied about every 15 seconds.

@@ -75,7 +75,7 @@ Bu komut `firebase/firestore.rules` kurallarını ve `web-admin` klasöründeki 
 - Yönetici hesabını masaüstü uygulamasında kullanma. Masaüstüne ayrı Firebase kullanıcısı tanımla.
 - Admin erişimi, yalnızca `admins/{UID}` belgesi bulunan kullanıcıya verilir. Bu belgeyi Console üzerinden elle oluştur; kurallar istemciden bu belgeyi oluşturmayı engeller.
 - Firestore kuralları değiştirilmiş bir istemcinin yerel kalan süreyi sahte raporlamasını bütünüyle engelleyemez. Bu ev içi kullanım kontrolü uygulamasıdır, Windows güvenlik sınırı değildir.
-- Web paneli başlangıç sürümüdür. WPF istemcisi henüz Firestore'a bağlanmıyor; gerçek senkronizasyon ve çevrimdışı davranış sonraki adımda eklenecek.
+- WPF istemcisi yapılandırmayı ve uzaktan kalan süre komutlarını yaklaşık 15 saniyede bir kontrol eder. Bağlantı kesilirse yerel sayaç çalışmaya devam eder ve eşitleme yeniden denenir.
 
 
 ## Telefon uygulaması olarak yükleme (PWA)

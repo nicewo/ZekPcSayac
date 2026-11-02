@@ -215,6 +215,30 @@ namespace ZekPcSayac
             _firebaseBusy = true;
             try
             {
+                var config = await _firebase.ReadConfigAsync();
+                _configuredDailyMinutes = config.DailySeconds / 60;
+                _configuredBonusMinutes = config.BonusSeconds / 60;
+
+                string today = DateTime.Now.ToString("yyyy-MM-dd");
+                if (!string.Equals(_state.DateKey, today, StringComparison.Ordinal))
+                {
+                    EnsureDailyState();
+                    RenderState();
+                    if (_state.IsPaused || _state.RemainingSeconds <= 0)
+                        EnterPausedScreen();
+                    else
+                        _timer.Start();
+                }
+                else if (config.BonusSeconds > _state.BonusSeconds)
+                {
+                    // A bonus granted today increases the live balance immediately.
+                    int addedSeconds = config.BonusSeconds - _state.BonusSeconds;
+                    _state.BonusSeconds = config.BonusSeconds;
+                    _state.RemainingSeconds = Math.Min(172800, _state.RemainingSeconds + addedSeconds);
+                    RenderState();
+                    SaveState();
+                }
+
                 var command = await _firebase.GetRemainingCommandAsync();
                 if (!string.IsNullOrWhiteSpace(command.CommandId)
                     && command.RemainingSeconds.HasValue
@@ -412,6 +436,14 @@ namespace ZekPcSayac
 
         private void CaptureAndMuteAudio()
         {
+            if (_state.AudioWasMutedByApp)
+            {
+                // Keep the original pre-pause state; repeated pause commands must not
+                // mistake the app's own mute for the user's original mute setting.
+                SetSystemMute(true);
+                return;
+            }
+
             try
             {
                 using var enumerator = new MMDeviceEnumerator();
@@ -487,8 +519,8 @@ namespace ZekPcSayac
 
         private void RenderState()
         {
-            string time = TimeSpan.FromSeconds(Math.Max(0, _state.RemainingSeconds))
-                .ToString(@"hh\:mm\:ss");
+            TimeSpan remaining = TimeSpan.FromSeconds(Math.Max(0, _state.RemainingSeconds));
+            string time = $"{(int)remaining.TotalHours:00}:{remaining.Minutes:00}:{remaining.Seconds:00}";
 
             RemainingText.Text = time;
             PausedRemainingText.Text = time;

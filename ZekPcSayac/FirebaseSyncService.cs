@@ -54,18 +54,8 @@ internal sealed class FirebaseSyncService
     public async Task<FirebaseSnapshot> ConnectAndReadAsync()
     {
         await SignInAsync();
-        var config = await GetDocumentAsync($"deviceConfig/{DeviceId}");
-        var fields = config.RootElement.GetProperty("fields");
-        string deviceUid = GetString(fields, "deviceAuthUid");
-        if (!string.Equals(deviceUid, _uid, StringComparison.Ordinal))
-            throw new InvalidOperationException("Bu Firebase hesabı cihaz için tanımlı değil. Web panelindeki PC UID ayarını kontrol et.");
-
-        int dailyMinutes = Math.Clamp(GetInt(fields, "dailyLimitMinutes", 120), 0, 1440);
-        int bonusMinutes = Math.Clamp(GetInt(fields, "bonusMinutes", 0), 0, 1440);
-        string bonusDateKey = GetString(fields, "bonusDateKey");
+        var (dailySeconds, bonusSeconds) = await ReadConfigAsync();
         string today = DateTime.Now.ToString("yyyy-MM-dd");
-        if (!string.Equals(bonusDateKey, today, StringComparison.Ordinal))
-            bonusMinutes = 0;
 
         JsonDocument? state = null;
         try { state = await GetDocumentAsync($"deviceState/{DeviceId}"); }
@@ -86,7 +76,26 @@ internal sealed class FirebaseSyncService
             }
         }
 
-        return new FirebaseSnapshot(dailyMinutes * 60, bonusMinutes * 60, remaining, paused, dateKey, state is null);
+        return new FirebaseSnapshot(dailySeconds, bonusSeconds, remaining, paused, dateKey, state is null);
+    }
+
+    public async Task<(int DailySeconds, int BonusSeconds)> ReadConfigAsync()
+    {
+        await SignInAsync();
+        using var config = await GetDocumentAsync($"deviceConfig/{DeviceId}");
+        var fields = config.RootElement.GetProperty("fields");
+        string deviceUid = GetString(fields, "deviceAuthUid");
+        if (!string.Equals(deviceUid, _uid, StringComparison.Ordinal))
+            throw new InvalidOperationException("Bu Firebase hesabı cihaz için tanımlı değil. Web panelindeki PC UID ayarını kontrol et.");
+
+        int dailyMinutes = Math.Clamp(GetInt(fields, "dailyLimitMinutes", 120), 0, 1440);
+        int bonusMinutes = Math.Clamp(GetInt(fields, "bonusMinutes", 0), 0, 1440);
+        string bonusDateKey = GetString(fields, "bonusDateKey");
+        string today = DateTime.Now.ToString("yyyy-MM-dd");
+        if (!string.Equals(bonusDateKey, today, StringComparison.Ordinal))
+            bonusMinutes = 0;
+
+        return (dailyMinutes * 60, bonusMinutes * 60);
     }
 
     public async Task PushStateAsync(int remainingSeconds, bool isPaused, string dateKey)
