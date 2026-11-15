@@ -12,4 +12,8 @@ public sealed class UsageState
     public string LastAppliedRemainingCommandId { get; set; } = "";
     public bool AudioWasMutedBeforePause { get; set; }
     public bool AudioWasMutedByApp { get; set; }
+    /// <summary>Sunucu zamanı ofseti (<see cref="TrustedClock.ServerOffset"/>). Eski dosyalarda 0.</summary>
+    public long ServerOffsetTicks { get; set; }
+    /// <summary>Son güvenilir UTC zamanı. Eski dosyalarda <see cref="DateTime.MinValue"/>.</summary>
+    public DateTime LastTrustedUtc { get; set; }
 }

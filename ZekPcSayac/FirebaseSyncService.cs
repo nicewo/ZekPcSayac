@@ -18,18 +18,23 @@ internal sealed class FirebaseSyncService
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(12) };
     private readonly string _credentialPath;
     private readonly string _exitHashPath;
+    private readonly TrustedClock _clock;
     private string? _email;
     private string? _password;
     private string? _uid;
     private string? _idToken;
     private DateTime _tokenExpiresAt = DateTime.MinValue;
 
-    public FirebaseSyncService(string appDirectory)
+    public FirebaseSyncService(string appDirectory, TrustedClock clock)
     {
         _credentialPath = System.IO.Path.Combine(appDirectory, "firebase-login.bin");
         _exitHashPath = System.IO.Path.Combine(appDirectory, "exit-hash.bin");
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         LoadCredentials();
     }
+
+    /// <summary>Son başarılı Firestore yanıtındaki Date başlığından hesaplanan sunucu ofseti (sunucu - sistem UTC). Yoksa null.</summary>
+    public TimeSpan? ServerUtcOffset { get; private set; }
 
     /// <summary>Son başarılı senkronizasyonda saklanan çıkış şifresi hash'i (offline çıkış için). Yoksa null.</summary>
     public ExitPasswordHash? LoadCachedExitPassword()
@@ -97,7 +102,7 @@ internal sealed class FirebaseSyncService
     {
         await SignInAsync();
         DeviceConfig config = await ReadConfigAsync();
-        string today = DateTime.Now.ToString("yyyy-MM-dd");
+        string today = DateKeys.For(_clock);
 
         JsonDocument? state = null;
         try { state = await GetDocumentAsync($"deviceState/{DeviceId}"); }
@@ -133,7 +138,7 @@ internal sealed class FirebaseSyncService
         int dailyMinutes = Math.Clamp(GetInt(fields, "dailyLimitMinutes", 120), 0, 1440);
         int bonusMinutes = Math.Clamp(GetInt(fields, "bonusMinutes", 0), 0, 1440);
         string bonusDateKey = GetString(fields, "bonusDateKey");
-        string today = DateTime.Now.ToString("yyyy-MM-dd");
+        string today = DateKeys.For(_clock);
         if (!string.Equals(bonusDateKey, today, StringComparison.Ordinal))
             bonusMinutes = 0;
 
@@ -168,6 +173,7 @@ internal sealed class FirebaseSyncService
         using var response = await Http.SendAsync(request);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Firestore durum kaydı başarısız: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        CaptureServerTime(response);
     }
 
     public async Task<(string? CommandId, int? RemainingSeconds)> GetRemainingCommandAsync()
@@ -216,7 +222,18 @@ internal sealed class FirebaseSyncService
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Firestore okuma başarısız: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}",
                 null, response.StatusCode);
+        CaptureServerTime(response);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
+    // Sistem saati geri alınsa bile sunucu Date başlığı gerçek zamanı verir; ofset buna göre güncellenir.
+    private void CaptureServerTime(HttpResponseMessage response)
+    {
+        DateTimeOffset? serverDate = response.Headers.Date;
+        if (serverDate is null) return;
+
+        ServerUtcOffset = serverDate.Value.UtcDateTime - DateTime.UtcNow;
+        _clock.SetServerOffset(ServerUtcOffset.Value);
     }
 
     private void LoadCredentials()

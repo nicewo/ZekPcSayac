@@ -16,6 +16,7 @@ namespace ZekPcSayac
         private const int InitialDailyMinutes = 120;
         private int _configuredDailyMinutes = InitialDailyMinutes;
         private int _configuredBonusMinutes;
+        private readonly TrustedClock _clock = new();
         private readonly FirebaseSyncService _firebase;
         // Null ise çıkış şifresi tanımlı değil; uygulama kapatılamaz.
         private ExitPasswordHash? _exitPassword;
@@ -55,7 +56,7 @@ namespace ZekPcSayac
             _stateFile = Path.Combine(appDirectory, "usage-state.json");
             _stateStore = CreateStateStore(appDirectory, _stateFile);
             _state = LoadState();
-            _firebase = new FirebaseSyncService(appDirectory);
+            _firebase = new FirebaseSyncService(appDirectory, _clock);
             // Offline çıkış için son bilinen hash; Firebase okunana kadar bu kullanılır.
             _exitPassword = _firebase.LoadCachedExitPassword();
 
@@ -104,7 +105,7 @@ namespace ZekPcSayac
                     _configuredDailyMinutes = snapshot.BaseSeconds / 60;
                     _configuredBonusMinutes = snapshot.BonusSeconds / 60;
                     _exitPassword = snapshot.ExitPassword;
-                    string today = DateTime.Now.ToString("yyyy-MM-dd");
+                    string today = DateKeys.For(_clock);
 
                     if (snapshot.StateDocumentMissing || !string.Equals(snapshot.DateKey, today, StringComparison.Ordinal))
                     {
@@ -242,8 +243,9 @@ namespace ZekPcSayac
                 _configuredBonusMinutes = config.BonusSeconds / 60;
                 _exitPassword = config.ExitPassword;
 
-                string today = DateTime.Now.ToString("yyyy-MM-dd");
-                if (!string.Equals(_state.DateKey, today, StringComparison.Ordinal))
+                // Yalnızca gün ileri gittiğinde yenile; saat geri alınırsa gün değişmez.
+                string today = DateKeys.For(_clock);
+                if (string.CompareOrdinal(today, _state.DateKey) > 0)
                 {
                     EnsureDailyState();
                     RenderState();
@@ -668,7 +670,9 @@ namespace ZekPcSayac
             switch (result.Status)
             {
                 case LoadStatus.Ok:
-                    return result.State!;
+                    // Kayıtlı güvenilir zaman, gün anahtarı hesaplanmadan önce geri yüklenir.
+                    _clock.Restore(TimeSpan.FromTicks(result.State!.ServerOffsetTicks), result.State.LastTrustedUtc);
+                    return result.State;
                 case LoadStatus.Missing:
                     return DefaultState();
                 default:
@@ -677,7 +681,7 @@ namespace ZekPcSayac
             }
         }
 
-        private static UsageState DefaultState()
+        private UsageState DefaultState()
         {
             return new UsageState
             {
@@ -686,11 +690,11 @@ namespace ZekPcSayac
                 RemainingSeconds = InitialDailyMinutes * 60,
                 IsPaused = false,
                 LastStartedUtc = DateTime.UtcNow,
-                DateKey = DateTime.Now.ToString("yyyy-MM-dd")
+                DateKey = DateKeys.For(_clock)
             };
         }
 
-        private static UsageState TamperedState()
+        private UsageState TamperedState()
         {
             UsageState state = DefaultState();
             state.RemainingSeconds = 0;
@@ -700,8 +704,9 @@ namespace ZekPcSayac
 
         private void EnsureDailyState()
         {
-            string today = DateTime.Now.ToString("yyyy-MM-dd");
-            if (string.Equals(_state.DateKey, today, StringComparison.Ordinal))
+            string today = DateKeys.For(_clock);
+            // Yalnızca gün ileri gittiğinde yenile; saat geri alınırsa kullanım hakkı yenilenmez.
+            if (string.CompareOrdinal(today, _state.DateKey) <= 0)
                 return;
 
             // New local calendar day: renew the base allowance and discard yesterday's bonus.
@@ -721,6 +726,8 @@ namespace ZekPcSayac
 
             try
             {
+                _state.ServerOffsetTicks = _clock.ServerOffset.Ticks;
+                _state.LastTrustedUtc = _clock.LastTrustedUtc;
                 _stateStore.Save(_state);
             }
             catch
