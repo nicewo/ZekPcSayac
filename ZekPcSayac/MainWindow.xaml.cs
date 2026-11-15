@@ -19,7 +19,9 @@ namespace ZekPcSayac
         private readonly DispatcherTimer _firebaseTimer;
         private bool _firebaseBusy;
         private bool _firebaseReady;
+        private bool _firebaseErrorDialogShown;
 
+        private readonly DispatcherTimer _lockScreenTimer;
         private readonly DispatcherTimer _timer;
         private readonly DispatcherTimer _dailyCheckTimer;
         private readonly string _stateFile;
@@ -67,6 +69,13 @@ namespace ZekPcSayac
             _firebaseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
             _firebaseTimer.Tick += FirebaseTimer_Tick;
 
+            // Lock screen hardening: re-assert topmost/activation every second while the
+            // paused screen is visible, and re-fit it when display settings change.
+            _lockScreenTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _lockScreenTimer.Tick += LockScreenTimer_Tick;
+            Deactivated += MainWindow_Deactivated;
+            SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
+
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
         }
@@ -107,16 +116,20 @@ namespace ZekPcSayac
                     _firebaseReady = true;
                     await _firebase.PushStateAsync(_state.RemainingSeconds, _state.IsPaused, _state.DateKey);
                     _firebaseTimer.Start();
-                    MessageBox.Show("Firebase bağlantısı kuruldu. PC kullanım durumu web paneliyle eşitleniyor.",
-                        "ZekPcSayac", MessageBoxButton.OK, MessageBoxImage.Information);
+                    LogFirebaseMessage("Firebase bağlantısı kuruldu. PC kullanım durumu web paneliyle eşitleniyor.");
                 }
                 catch (Exception ex)
                 {
                     LogFirebaseError(ex);
                     if (ex.Message.StartsWith("Firebase girişi başarısız", StringComparison.Ordinal))
                         _firebase.ClearCredentials();
-                    MessageBox.Show("Firebase bağlantısı kurulamadı. Uygulama yerel sayaçla çalışmaya devam edecek.\n\n" + ex.Message,
-                        "Firebase bağlantı hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    // Show the error dialog at most once per session; later failures only go to the log.
+                    if (!_firebaseErrorDialogShown)
+                    {
+                        _firebaseErrorDialogShown = true;
+                        MessageBox.Show("Firebase bağlantısı kurulamadı. Uygulama yerel sayaçla çalışmaya devam edecek.\n\n" + ex.Message,
+                            "Firebase bağlantı hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
                 }
             }
 
@@ -274,10 +287,20 @@ namespace ZekPcSayac
 
         private void LogFirebaseError(Exception ex)
         {
+            AppendFirebaseLog(ex.ToString());
+        }
+
+        private void LogFirebaseMessage(string message)
+        {
+            AppendFirebaseLog(message);
+        }
+
+        private void AppendFirebaseLog(string text)
+        {
             try
             {
                 string logPath = Path.Combine(Path.GetDirectoryName(_stateFile)!, "firebase.log");
-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n");
+                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}\r\n");
             }
             catch { }
         }
@@ -407,6 +430,7 @@ namespace ZekPcSayac
             _state.LastStartedUtc = DateTime.UtcNow;
             SaveState();
 
+            _lockScreenTimer.Stop();
             PausedPanel.Visibility = Visibility.Collapsed;
             TimerPanel.Visibility = Visibility.Visible;
             WindowState = WindowState.Normal;
@@ -424,14 +448,68 @@ namespace ZekPcSayac
             TimerPanel.Visibility = Visibility.Collapsed;
             PausedPanel.Visibility = Visibility.Visible;
             Background = System.Windows.Media.Brushes.Black;
+            ApplyLockScreenBounds();
+            Topmost = true;
+            RenderState();
+            _lockScreenTimer.Start();
+        }
+
+        // Fits the window exactly onto the virtual screen (all monitors). Normal state is used
+        // instead of Maximized: a maximized borderless window only fills one monitor's work area,
+        // so it could never cover the virtual screen.
+        private void ApplyLockScreenBounds()
+        {
             WindowState = WindowState.Normal;
             Left = SystemParameters.VirtualScreenLeft;
             Top = SystemParameters.VirtualScreenTop;
             Width = SystemParameters.VirtualScreenWidth;
             Height = SystemParameters.VirtualScreenHeight;
-            WindowState = WindowState.Maximized;
+        }
+
+        private bool IsLockScreenActive => PausedPanel.Visibility == Visibility.Visible;
+
+        // The close-password dialog is modal and runs on this thread, so the lock screen must not
+        // steal activation from it while it is open.
+        private bool CanEnforceLockScreen => IsLockScreenActive && !_closePromptOpen;
+
+        private bool CoversVirtualScreen()
+        {
+            const double tolerance = 0.5;
+            return Left <= SystemParameters.VirtualScreenLeft + tolerance
+                && Top <= SystemParameters.VirtualScreenTop + tolerance
+                && Left + Width >= SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - tolerance
+                && Top + Height >= SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - tolerance;
+        }
+
+        private void LockScreenTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!CanEnforceLockScreen) return;
+
             Topmost = true;
-            RenderState();
+            Activate();
+            if (!CoversVirtualScreen())
+                ApplyLockScreenBounds();
+        }
+
+        private void MainWindow_Deactivated(object? sender, EventArgs e)
+        {
+            if (!CanEnforceLockScreen) return;
+
+            // Re-activate after focus is lost; deferred so activation is not changed mid-deactivation.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (CanEnforceLockScreen)
+                    Activate();
+            }), DispatcherPriority.Background);
+        }
+
+        private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (IsLockScreenActive)
+                    ApplyLockScreenBounds();
+            }), DispatcherPriority.Background);
         }
 
         private void CaptureAndMuteAudio()
@@ -620,6 +698,8 @@ namespace ZekPcSayac
             _timer.Stop();
             _dailyCheckTimer.Stop();
             _firebaseTimer.Stop();
+            _lockScreenTimer.Stop();
+            SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
             SaveState();
         }
 

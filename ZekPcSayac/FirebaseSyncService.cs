@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -59,7 +60,7 @@ internal sealed class FirebaseSyncService
 
         JsonDocument? state = null;
         try { state = await GetDocumentAsync($"deviceState/{DeviceId}"); }
-        catch (HttpRequestException ex) when (ex.Message.Contains("404", StringComparison.Ordinal)) { }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { }
 
         int? remaining = null;
         bool? paused = null;
@@ -136,7 +137,7 @@ internal sealed class FirebaseSyncService
             int? seconds = GetNullableInt(fields, "requestedRemainingSeconds");
             return (string.IsNullOrWhiteSpace(commandId) ? null : commandId, seconds);
         }
-        catch (HttpRequestException ex) when (ex.Message.Contains("404", StringComparison.Ordinal))
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return (null, null);
         }
@@ -169,7 +170,8 @@ internal sealed class FirebaseSyncService
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _idToken);
         using var response = await Http.SendAsync(request);
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"Firestore okuma başarısız: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+            throw new HttpRequestException($"Firestore okuma başarısız: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}",
+                null, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
     }
 
