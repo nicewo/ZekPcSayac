@@ -216,6 +216,7 @@ function startListeners() {
       $("dailyLimitInput").value = currentConfig.dailyLimitMinutes;
     }
     $("deviceUidInput").value = currentConfig.deviceAuthUid || "";
+    $("exitPassStatus").textContent = currentConfig.exitPassword ? "Şifre belirlenmiş" : "Henüz belirlenmedi";
     $("connectionBadge").textContent = "Firebase bağlı";
     $("connectionBadge").classList.add("online");
   }, (error) => {
@@ -344,6 +345,62 @@ $("addBonusButton").addEventListener("click", async () => {
     setMessage("bonusMessage", `${minutes} dakika ek süre kaydedildi. Bugünkü panel toplamı: ${currentBonus + minutes} dakika.`, "success");
   } catch (error) {
     setMessage("bonusMessage", friendlyError(error), "error");
+  }
+});
+
+const EXIT_PASSWORD_ITERATIONS = 150000;
+
+function toBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+// Şifre yalnızca türetilmiş PBKDF2 hash'i olarak saklanır; düz metin hiçbir yere yazılmaz.
+async function deriveExitPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations: EXIT_PASSWORD_ITERATIONS },
+    key,
+    256
+  );
+  return {
+    algo: "PBKDF2-SHA256",
+    iterations: EXIT_PASSWORD_ITERATIONS,
+    saltB64: toBase64(salt),
+    hashB64: toBase64(new Uint8Array(bits))
+  };
+}
+
+$("saveExitPassButton").addEventListener("click", async () => {
+  const password = $("exitPassInput").value;
+  const repeat = $("exitPassRepeatInput").value;
+  if (password.length < 6) {
+    setMessage("exitPassMessage", "Şifre en az 6 karakter olmalı.", "error");
+    return;
+  }
+  if (password !== repeat) {
+    setMessage("exitPassMessage", "İki şifre alanı eşleşmiyor.", "error");
+    return;
+  }
+
+  const button = $("saveExitPassButton");
+  button.disabled = true;
+  try {
+    const exitPassword = await deriveExitPassword(password);
+    await setDoc(doc(db, "deviceConfig", DEVICE_ID), {
+      exitPassword,
+      exitPasswordUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    setMessage("exitPassMessage", "Çıkış şifresi kaydedildi.", "success");
+  } catch (error) {
+    setMessage("exitPassMessage", friendlyError(error), "error");
+  } finally {
+    $("exitPassInput").value = "";
+    $("exitPassRepeatInput").value = "";
+    button.disabled = false;
   }
 });
 

@@ -103,6 +103,19 @@
           <button id="addBonusButton" class="button button-accent full-width" type="button">Ek süre ver</button>
           <p id="bonusMessage" class="message" role="status"></p>
         </section>
+
+        <section class="panel">
+          <p class="eyebrow">GÜVENLİK</p>
+          <h3>Çıkış şifresi</h3>
+          <p class="muted">Masaüstü uygulamasından çıkış yapmak için istenecek şifre. En az 6 karakter.</p>
+          <p id="exitPassStatus" class="message" role="status">Durum yükleniyor…</p>
+          <label for="exitPassInput">Yeni şifre</label>
+          <input id="exitPassInput" type="password" autocomplete="new-password">
+          <label for="exitPassRepeatInput">Yeni şifre (tekrar)</label>
+          <input id="exitPassRepeatInput" type="password" autocomplete="new-password">
+          <button id="saveExitPassButton" class="button button-primary full-width" type="button">Çıkış şifresini kaydet</button>
+          <p id="exitPassMessage" class="message" role="status"></p>
+        </section>
       </div>
 
       <details class="panel setup-panel" id="deviceSetupDetails">
