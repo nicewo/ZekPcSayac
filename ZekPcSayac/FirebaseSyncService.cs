@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using ZekPcSayac.Core;
 
 namespace ZekPcSayac;
 
@@ -16,6 +17,7 @@ internal sealed class FirebaseSyncService
     private const string DeviceId = "zekeriyas-pc";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(12) };
     private readonly string _credentialPath;
+    private readonly string _exitHashPath;
     private string? _email;
     private string? _password;
     private string? _uid;
@@ -25,7 +27,46 @@ internal sealed class FirebaseSyncService
     public FirebaseSyncService(string appDirectory)
     {
         _credentialPath = System.IO.Path.Combine(appDirectory, "firebase-login.bin");
+        _exitHashPath = System.IO.Path.Combine(appDirectory, "exit-hash.bin");
         LoadCredentials();
+    }
+
+    /// <summary>Son başarılı senkronizasyonda saklanan çıkış şifresi hash'i (offline çıkış için). Yoksa null.</summary>
+    public ExitPasswordHash? LoadCachedExitPassword()
+    {
+        try
+        {
+            if (!System.IO.File.Exists(_exitHashPath)) return null;
+            byte[] encrypted = System.IO.File.ReadAllBytes(_exitHashPath);
+            byte[] clear = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+            var saved = JsonSerializer.Deserialize<ExitPasswordHash>(clear);
+            CryptographicOperations.ZeroMemory(clear);
+            return saved;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void SaveCachedExitPassword(ExitPasswordHash? hash)
+    {
+        try
+        {
+            if (hash is null)
+            {
+                if (System.IO.File.Exists(_exitHashPath)) System.IO.File.Delete(_exitHashPath);
+                return;
+            }
+
+            byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(hash));
+            byte[] protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+            System.IO.File.WriteAllBytes(_exitHashPath, protectedBytes);
+        }
+        catch
+        {
+            // Önbellek yazılamazsa bellekteki hash ile çalışılır; yalnızca offline çıkış etkilenir.
+        }
     }
 
     public bool HasCredentials => !string.IsNullOrWhiteSpace(_email) && !string.IsNullOrWhiteSpace(_password);
@@ -55,7 +96,7 @@ internal sealed class FirebaseSyncService
     public async Task<FirebaseSnapshot> ConnectAndReadAsync()
     {
         await SignInAsync();
-        var (dailySeconds, bonusSeconds) = await ReadConfigAsync();
+        DeviceConfig config = await ReadConfigAsync();
         string today = DateTime.Now.ToString("yyyy-MM-dd");
 
         JsonDocument? state = null;
@@ -77,10 +118,10 @@ internal sealed class FirebaseSyncService
             }
         }
 
-        return new FirebaseSnapshot(dailySeconds, bonusSeconds, remaining, paused, dateKey, state is null);
+        return new FirebaseSnapshot(config.DailySeconds, config.BonusSeconds, remaining, paused, dateKey, state is null, config.ExitPassword);
     }
 
-    public async Task<(int DailySeconds, int BonusSeconds)> ReadConfigAsync()
+    public async Task<DeviceConfig> ReadConfigAsync()
     {
         await SignInAsync();
         using var config = await GetDocumentAsync($"deviceConfig/{DeviceId}");
@@ -96,7 +137,10 @@ internal sealed class FirebaseSyncService
         if (!string.Equals(bonusDateKey, today, StringComparison.Ordinal))
             bonusMinutes = 0;
 
-        return (dailyMinutes * 60, bonusMinutes * 60);
+        ExitPasswordHash? exitPassword = GetExitPassword(fields);
+        SaveCachedExitPassword(exitPassword);
+
+        return new DeviceConfig(dailyMinutes * 60, bonusMinutes * 60, exitPassword);
     }
 
     public async Task PushStateAsync(int remainingSeconds, bool isPaused, string dateKey)
@@ -200,6 +244,24 @@ internal sealed class FirebaseSyncService
             ? result.GetString() ?? "" : "";
     }
 
+    // Eksik veya bozuk exitPassword null döner; bu durumda uygulama kapatılamaz (kilitli kalır).
+    private static ExitPasswordHash? GetExitPassword(JsonElement fields)
+    {
+        if (!fields.TryGetProperty("exitPassword", out var field)
+            || !field.TryGetProperty("mapValue", out var map)
+            || !map.TryGetProperty("fields", out var hashFields))
+            return null;
+
+        string algo = GetString(hashFields, "algo");
+        string salt = GetString(hashFields, "saltB64");
+        string hash = GetString(hashFields, "hashB64");
+        int iterations = GetInt(hashFields, "iterations", 0);
+        if (string.IsNullOrWhiteSpace(algo) || string.IsNullOrWhiteSpace(salt) || string.IsNullOrWhiteSpace(hash))
+            return null;
+
+        return new ExitPasswordHash(algo, iterations, salt, hash);
+    }
+
     private static int GetInt(JsonElement fields, string name, int fallback)
     {
         return GetNullableInt(fields, name) ?? fallback;
@@ -233,4 +295,5 @@ internal sealed record FirebaseSnapshot(
     int? CloudRemainingSeconds,
     bool? CloudIsPaused,
     string DateKey,
-    bool StateDocumentMissing);
+    bool StateDocumentMissing,
+    ExitPasswordHash? ExitPassword);

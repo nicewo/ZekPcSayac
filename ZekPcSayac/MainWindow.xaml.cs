@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using NAudio.CoreAudioApi;
+using ZekPcSayac.Core;
 
 namespace ZekPcSayac
 {
@@ -16,6 +17,9 @@ namespace ZekPcSayac
         private int _configuredDailyMinutes = InitialDailyMinutes;
         private int _configuredBonusMinutes;
         private readonly FirebaseSyncService _firebase;
+        // Null ise çıkış şifresi tanımlı değil; uygulama kapatılamaz.
+        private ExitPasswordHash? _exitPassword;
+        private readonly ExitPasswordAttemptLimiter _exitLimiter = new(new SystemClock());
         private readonly DispatcherTimer _firebaseTimer;
         private bool _firebaseBusy;
         private bool _firebaseReady;
@@ -30,7 +34,6 @@ namespace ZekPcSayac
         private bool _wasMutedBeforePause;
         private bool _allowClose;
         private bool _closePromptOpen;
-        private const string ExitPassword = "682543";
 
         [DllImport("user32.dll", SetLastError = false)]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -50,6 +53,8 @@ namespace ZekPcSayac
             _stateFile = Path.Combine(appDirectory, "usage-state.json");
             _state = LoadState();
             _firebase = new FirebaseSyncService(appDirectory);
+            // Offline çıkış için son bilinen hash; Firebase okunana kadar bu kullanılır.
+            _exitPassword = _firebase.LoadCachedExitPassword();
 
             _timer = new DispatcherTimer
             {
@@ -95,6 +100,7 @@ namespace ZekPcSayac
                     FirebaseSnapshot snapshot = await _firebase.ConnectAndReadAsync();
                     _configuredDailyMinutes = snapshot.BaseSeconds / 60;
                     _configuredBonusMinutes = snapshot.BonusSeconds / 60;
+                    _exitPassword = snapshot.ExitPassword;
                     string today = DateTime.Now.ToString("yyyy-MM-dd");
 
                     if (snapshot.StateDocumentMissing || !string.Equals(snapshot.DateKey, today, StringComparison.Ordinal))
@@ -231,6 +237,7 @@ namespace ZekPcSayac
                 var config = await _firebase.ReadConfigAsync();
                 _configuredDailyMinutes = config.DailySeconds / 60;
                 _configuredBonusMinutes = config.BonusSeconds / 60;
+                _exitPassword = config.ExitPassword;
 
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
                 if (!string.Equals(_state.DateKey, today, StringComparison.Ordinal))
@@ -705,6 +712,14 @@ namespace ZekPcSayac
 
         private void RequestCloseWithPassword()
         {
+            ExitPasswordHash? expectedHash = _exitPassword;
+            if (expectedHash is null)
+            {
+                MessageBox.Show("Çıkış şifresi henüz belirlenmemiş. Web panelden belirleyin.",
+                    "ZekPcSayac - Çıkış", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             var passwordBox = new System.Windows.Controls.PasswordBox
             {
                 Width = 220,
@@ -775,16 +790,26 @@ namespace ZekPcSayac
 
             exitButton.Click += (_, _) =>
             {
-                if (string.Equals(passwordBox.Password, ExitPassword, StringComparison.Ordinal))
+                TimeSpan? locked = _exitLimiter.RemainingLock();
+                if (locked is not null)
                 {
-                    dialog.DialogResult = true;
-                }
-                else
-                {
-                    errorText.Text = "Şifre yanlış.";
+                    errorText.Text = LockedMessage(locked.Value);
                     passwordBox.Clear();
-                    passwordBox.Focus();
+                    return;
                 }
+
+                if (ExitPasswordVerifier.Verify(passwordBox.Password, expectedHash))
+                {
+                    _exitLimiter.RecordSuccess();
+                    dialog.DialogResult = true;
+                    return;
+                }
+
+                _exitLimiter.RecordFailure();
+                TimeSpan? lockedAfterFailure = _exitLimiter.RemainingLock();
+                errorText.Text = lockedAfterFailure is null ? "Şifre yanlış." : LockedMessage(lockedAfterFailure.Value);
+                passwordBox.Clear();
+                passwordBox.Focus();
             };
 
             dialog.Loaded += (_, _) => passwordBox.Focus();
@@ -794,6 +819,12 @@ namespace ZekPcSayac
                 _allowClose = true;
                 Close();
             }
+        }
+
+        private static string LockedMessage(TimeSpan remaining)
+        {
+            int seconds = (int)Math.Ceiling(remaining.TotalSeconds);
+            return $"Çok fazla yanlış deneme. {seconds} sn sonra tekrar deneyin.";
         }
 
         private sealed class UsageState
