@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="ZekPcSayac.Core.Tests/ZekPcSayac.Core.Tests.csproj" />
+  <Project Path="ZekPcSayac.Core/ZekPcSayac.Core.csproj" />
   <Project Path="ZekPcSayac/ZekPcSayac.csproj" />
 </Solution>

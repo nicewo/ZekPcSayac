@@ -24,3 +24,6 @@ jobs:
 
       - name: Build
         run: dotnet build ZekPcSayac.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test ZekPcSayac.slnx --configuration Release --no-build

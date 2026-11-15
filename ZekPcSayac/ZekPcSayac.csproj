@@ -13,4 +13,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ZekPcSayac.Core\ZekPcSayac.Core.csproj" />
+  </ItemGroup>
+
 </Project>
