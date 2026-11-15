@@ -24,6 +24,13 @@ public static class DateKeys
         return turkeyTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Verilen UTC anının Türkiye yerel saatini döndürür.</summary>
+    public static DateTime TurkeyLocal(DateTime utc)
+    {
+        DateTime utcKind = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(utcKind, TurkeyZone.Value);
+    }
+
     private static TimeZoneInfo ResolveTurkeyZone()
     {
         foreach (string id in new[] { WindowsTurkeyZoneId, IanaTurkeyZoneId })

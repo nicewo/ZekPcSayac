@@ -29,6 +29,8 @@ namespace ZekPcSayac
         private readonly DispatcherTimer _lockScreenTimer;
         private readonly DispatcherTimer _timer;
         private readonly DispatcherTimer _dailyCheckTimer;
+        // Duraklatılmışken de saat aralığı geçişlerini yakalar (1 sn).
+        private readonly DispatcherTimer _windowTimer;
         private readonly string _stateFile;
         // Null ise imza anahtarı kullanılamıyor; durum kilitli başlar ve yazılmaz.
         private readonly SignedStateStore? _stateStore;
@@ -75,6 +77,10 @@ namespace ZekPcSayac
             _dailyCheckTimer.Tick += DailyCheckTimer_Tick;
             _dailyCheckTimer.Start();
 
+            _windowTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _windowTimer.Tick += WindowTimer_Tick;
+            _windowTimer.Start();
+
             _firebaseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
             _firebaseTimer.Tick += FirebaseTimer_Tick;
 
@@ -105,6 +111,7 @@ namespace ZekPcSayac
                     _configuredDailyMinutes = snapshot.BaseSeconds / 60;
                     _configuredBonusMinutes = snapshot.BonusSeconds / 60;
                     _exitPassword = snapshot.ExitPassword;
+                    ApplyWindowConfig(snapshot.AllowedWindowsEnabled, snapshot.AllowedWindows);
                     string today = DateKeys.For(_clock);
 
                     if (snapshot.StateDocumentMissing || !string.Equals(snapshot.DateKey, today, StringComparison.Ordinal))
@@ -145,7 +152,7 @@ namespace ZekPcSayac
 
             EnsureDailyState();
             RenderState();
-            if (_state.IsPaused || _state.RemainingSeconds <= 0)
+            if (_state.IsPaused || _state.RemainingSeconds <= 0 || DecideNow().Reason == LockReason.OutsideWindow)
             {
                 _state.IsPaused = true;
                 if (_state.AudioWasMutedByApp) SetSystemMute(true);
@@ -242,6 +249,7 @@ namespace ZekPcSayac
                 _configuredDailyMinutes = config.DailySeconds / 60;
                 _configuredBonusMinutes = config.BonusSeconds / 60;
                 _exitPassword = config.ExitPassword;
+                ApplyWindowConfig(config.AllowedWindowsEnabled, config.AllowedWindows);
 
                 // Yalnızca gün ileri gittiğinde yenile; saat geri alınırsa gün değişmez.
                 string today = DateKeys.For(_clock);
@@ -387,8 +395,45 @@ namespace ZekPcSayac
             return false;
         }
 
+        // Son başarılı okunan saat kısıtı; offline iken UsageState'teki bu kopya kullanılır.
+        private void ApplyWindowConfig(bool enabled, System.Collections.Generic.IReadOnlyList<AllowedWindow> windows)
+        {
+            _state.AllowedWindowsEnabled = enabled;
+            _state.AllowedWindows = enabled ? new System.Collections.Generic.List<AllowedWindow>(windows) : new();
+            SaveState();
+        }
+
+        private LockDecision DecideNow()
+        {
+            DateTime localNow = DateKeys.TurkeyLocal(_clock.UtcNow);
+            bool quotaExhausted = _state.IsPaused || _state.RemainingSeconds <= 0;
+            return LockDecider.Decide(localNow, _state.AllowedWindowsEnabled, _state.AllowedWindows, quotaExhausted);
+        }
+
+        // Çalışırken saat dışına çıkıldıysa sayacı düşürmeden kilitler. Kilitlediyse true döner.
+        private bool EnforceWindowLock()
+        {
+            if (_state.IsPaused || IsLockScreenActive) return false;
+            if (DecideNow().Reason != LockReason.OutsideWindow) return false;
+
+            CaptureAndMuteAudio();
+            TryPauseMedia();
+            _state.IsPaused = true;
+            SaveState();
+            EnterPausedScreen();
+            return true;
+        }
+
+        private void WindowTimer_Tick(object? sender, EventArgs e)
+        {
+            if (EnforceWindowLock()) return;
+            RenderState();
+        }
+
         private void Timer_Tick(object? sender, EventArgs e)
         {
+            if (EnforceWindowLock()) return;
+
             EnsureDailyState();
 
             if (_state.RemainingSeconds > 0)
@@ -431,7 +476,8 @@ namespace ZekPcSayac
 
         private void ResumeUsage()
         {
-            if (_state.RemainingSeconds <= 0)
+            // Saat dışında "Devam Et" açmaz; kilit ekranı sebebi gösterir.
+            if (_state.RemainingSeconds <= 0 || DecideNow().Reason == LockReason.OutsideWindow)
             {
                 EnterPausedScreen();
                 return;
@@ -615,6 +661,42 @@ namespace ZekPcSayac
             RemainingText.Text = time;
             PausedRemainingText.Text = time;
             PauseResumeButton.Content = _state.IsPaused ? "Devam Et" : "Durdur";
+
+            LockDecision decision = DecideNow();
+
+            if (decision.Reason == LockReason.OutsideWindow)
+            {
+                PausedReasonText.Text = decision.NextWindowStart is DateTime next
+                    ? $"Kullanım saati dışında. Açılış: {LockDecider.FormatNextStart(next)}"
+                    : "Kullanım saati dışında.";
+                PausedReasonText.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                PausedReasonText.Visibility = Visibility.Collapsed;
+            }
+
+            // Kapanış uyarısı yalnızca sayaç çalışırken gösterilir.
+            int level = _state.IsPaused ? 0 : LockDecider.WarningLevel(decision.TimeUntilWindowEnd);
+            RemainingText.Foreground = level switch
+            {
+                2 => System.Windows.Media.Brushes.Red,
+                1 => System.Windows.Media.Brushes.Orange,
+                _ => System.Windows.Media.Brushes.White
+            };
+
+            if (level == 2 && decision.TimeUntilWindowEnd is TimeSpan left)
+            {
+                CloseWarningText.Text = $"Kapanışa {Math.Max(0, (int)Math.Ceiling(left.TotalSeconds))} sn";
+                CloseWarningText.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                CloseWarningText.Visibility = Visibility.Collapsed;
+            }
+
+            if (!IsLockScreenActive)
+                Height = CloseWarningText.Visibility == Visibility.Visible ? 92 : 76;
         }
 
         private static SignedStateStore? CreateStateStore(string appDirectory, string stateFile)
@@ -769,6 +851,7 @@ namespace ZekPcSayac
 
             _timer.Stop();
             _dailyCheckTimer.Stop();
+            _windowTimer.Stop();
             _firebaseTimer.Stop();
             _lockScreenTimer.Stop();
             SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;

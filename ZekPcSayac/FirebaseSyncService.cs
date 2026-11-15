@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Http;
+using System.Collections.Generic;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -123,7 +124,8 @@ internal sealed class FirebaseSyncService
             }
         }
 
-        return new FirebaseSnapshot(config.DailySeconds, config.BonusSeconds, remaining, paused, dateKey, state is null, config.ExitPassword);
+        return new FirebaseSnapshot(config.DailySeconds, config.BonusSeconds, remaining, paused, dateKey, state is null, config.ExitPassword,
+            config.AllowedWindowsEnabled, config.AllowedWindows);
     }
 
     public async Task<DeviceConfig> ReadConfigAsync()
@@ -145,7 +147,20 @@ internal sealed class FirebaseSyncService
         ExitPasswordHash? exitPassword = GetExitPassword(fields);
         SaveCachedExitPassword(exitPassword);
 
-        return new DeviceConfig(dailyMinutes * 60, bonusMinutes * 60, exitPassword);
+        bool windowsEnabled = GetNullableBool(fields, "allowedWindowsEnabled") ?? false;
+        List<AllowedWindow> windows = [];
+        if (windowsEnabled)
+        {
+            if (fields.TryGetProperty("allowedWindows", out var windowsField)
+                && windowsField.TryGetProperty("arrayValue", out var windowsArray))
+            {
+                (windows, int skipped) = AllowedWindowParser.Parse(windowsArray);
+                if (skipped > 0)
+                    System.Diagnostics.Debug.WriteLine($"allowedWindows: {skipped} geçersiz öğe atlandı.");
+            }
+        }
+
+        return new DeviceConfig(dailyMinutes * 60, bonusMinutes * 60, exitPassword, windowsEnabled, windows);
     }
 
     public async Task PushStateAsync(int remainingSeconds, bool isPaused, string dateKey)
@@ -313,4 +328,6 @@ internal sealed record FirebaseSnapshot(
     bool? CloudIsPaused,
     string DateKey,
     bool StateDocumentMissing,
-    ExitPasswordHash? ExitPassword);
+    ExitPasswordHash? ExitPassword,
+    bool AllowedWindowsEnabled,
+    System.Collections.Generic.IReadOnlyList<AllowedWindow> AllowedWindows);

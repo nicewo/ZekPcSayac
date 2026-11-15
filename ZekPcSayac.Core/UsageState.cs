@@ -16,4 +16,7 @@ public sealed class UsageState
     public long ServerOffsetTicks { get; set; }
     /// <summary>Son güvenilir UTC zamanı. Eski dosyalarda <see cref="DateTime.MinValue"/>.</summary>
     public DateTime LastTrustedUtc { get; set; }
+    /// <summary>Son başarılı okunan saat kısıtı ayarı (offline kullanım için). Eski dosyalarda false.</summary>
+    public bool AllowedWindowsEnabled { get; set; }
+    public List<AllowedWindow> AllowedWindows { get; set; } = [];
 }
