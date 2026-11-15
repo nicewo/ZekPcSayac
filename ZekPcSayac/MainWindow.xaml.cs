@@ -1,10 +1,10 @@
 using System;
 using System.IO;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 using ZekPcSayac.Core;
@@ -29,6 +29,8 @@ namespace ZekPcSayac
         private readonly DispatcherTimer _timer;
         private readonly DispatcherTimer _dailyCheckTimer;
         private readonly string _stateFile;
+        // Null ise imza anahtarı kullanılamıyor; durum kilitli başlar ve yazılmaz.
+        private readonly SignedStateStore? _stateStore;
         private UsageState _state;
         private bool _audioStateCaptured;
         private bool _wasMutedBeforePause;
@@ -51,6 +53,7 @@ namespace ZekPcSayac
 
             Directory.CreateDirectory(appDirectory);
             _stateFile = Path.Combine(appDirectory, "usage-state.json");
+            _stateStore = CreateStateStore(appDirectory, _stateFile);
             _state = LoadState();
             _firebase = new FirebaseSyncService(appDirectory);
             // Offline çıkış için son bilinen hash; Firebase okunana kadar bu kullanılır.
@@ -612,23 +615,70 @@ namespace ZekPcSayac
             PauseResumeButton.Content = _state.IsPaused ? "Devam Et" : "Durdur";
         }
 
-        private UsageState LoadState()
+        private static SignedStateStore? CreateStateStore(string appDirectory, string stateFile)
         {
+            byte[]? key = LoadOrCreateStateKey(appDirectory);
+            return key is null ? null : new SignedStateStore(stateFile, key);
+        }
+
+        // Anahtar DPAPI (CurrentUser) ile şifreli saklanır. Mevcut anahtar okunamazsa
+        // yeni anahtar üretilmez; aksi halde imzalı durum sessizce sıfırlanabilirdi.
+        private static byte[]? LoadOrCreateStateKey(string appDirectory)
+        {
+            string keyPath = Path.Combine(appDirectory, "state-key.bin");
             try
             {
-                if (File.Exists(_stateFile))
+                if (File.Exists(keyPath))
                 {
-                    string json = File.ReadAllText(_stateFile);
-                    var saved = JsonSerializer.Deserialize<UsageState>(json);
-                    if (saved is not null && saved.RemainingSeconds >= 0)
-                        return saved;
+                    byte[] protectedKey = File.ReadAllBytes(keyPath);
+                    byte[] key = ProtectedData.Unprotect(protectedKey, null, DataProtectionScope.CurrentUser);
+                    return key.Length == 32 ? key : null;
                 }
+
+                byte[] newKey = RandomNumberGenerator.GetBytes(32);
+                byte[] protectedNewKey = ProtectedData.Protect(newKey, null, DataProtectionScope.CurrentUser);
+                File.WriteAllBytes(keyPath, protectedNewKey);
+                return newKey;
             }
             catch
             {
-                // A corrupt local state must not crash startup.
+                return null;
+            }
+        }
+
+        private UsageState LoadState()
+        {
+            if (_stateStore is null)
+            {
+                AppendFirebaseLog("state key unavailable; state locked");
+                return TamperedState();
             }
 
+            LoadResult result;
+            try
+            {
+                result = _stateStore.Load();
+            }
+            catch
+            {
+                // Okunamayan durum, süre sıfırlanarak bypass edilemesin diye kilitli kabul edilir.
+                result = new LoadResult(LoadStatus.Tampered);
+            }
+
+            switch (result.Status)
+            {
+                case LoadStatus.Ok:
+                    return result.State!;
+                case LoadStatus.Missing:
+                    return DefaultState();
+                default:
+                    AppendFirebaseLog("state tampered");
+                    return TamperedState();
+            }
+        }
+
+        private static UsageState DefaultState()
+        {
             return new UsageState
             {
                 BaseSeconds = InitialDailyMinutes * 60,
@@ -638,6 +688,14 @@ namespace ZekPcSayac
                 LastStartedUtc = DateTime.UtcNow,
                 DateKey = DateTime.Now.ToString("yyyy-MM-dd")
             };
+        }
+
+        private static UsageState TamperedState()
+        {
+            UsageState state = DefaultState();
+            state.RemainingSeconds = 0;
+            state.IsPaused = true;
+            return state;
         }
 
         private void EnsureDailyState()
@@ -658,12 +716,12 @@ namespace ZekPcSayac
 
         private void SaveState()
         {
+            if (_stateStore is null)
+                return;
+
             try
             {
-                string json = JsonSerializer.Serialize(_state);
-                string tempFile = _stateFile + ".tmp";
-                File.WriteAllText(tempFile, json);
-                File.Move(tempFile, _stateFile, true);
+                _stateStore.Save(_state);
             }
             catch
             {
@@ -827,17 +885,5 @@ namespace ZekPcSayac
             return $"Çok fazla yanlış deneme. {seconds} sn sonra tekrar deneyin.";
         }
 
-        private sealed class UsageState
-        {
-            public int BaseSeconds { get; set; }
-            public int BonusSeconds { get; set; }
-            public int RemainingSeconds { get; set; }
-            public bool IsPaused { get; set; }
-            public DateTime LastStartedUtc { get; set; }
-            public string DateKey { get; set; } = "";
-            public string LastAppliedRemainingCommandId { get; set; } = "";
-            public bool AudioWasMutedBeforePause { get; set; }
-            public bool AudioWasMutedByApp { get; set; }
-        }
     }
 }
