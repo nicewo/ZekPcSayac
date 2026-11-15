@@ -83,6 +83,28 @@
         <p id="remainingMessage" class="message" role="status"></p>
       </section>
 
+      <section class="panel windows-panel">
+        <div class="windows-header">
+          <div>
+            <p class="eyebrow">SAAT ARALIĞI</p>
+            <h3>Kullanım saatleri</h3>
+          </div>
+          <label class="switch" for="windowsEnabledInput">
+            <input id="windowsEnabledInput" type="checkbox">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span id="windowsEnabledText">Kapalı</span>
+          </label>
+        </div>
+        <p class="muted">Kapalıyken saat kısıtı uygulanmaz. Açıkken bilgisayar yalnızca aşağıdaki aralıklarda kullanılabilir. Bitiş saati başlangıçtan önceyse aralık ertesi güne taşar.</p>
+        <div id="windowsList" class="windows-list"></div>
+        <div class="windows-actions">
+          <button id="addWindowButton" class="button button-secondary" type="button">Satır ekle</button>
+          <button id="windowsTemplateButton" class="button button-quiet" type="button">Hafta içi 15:00–20:30, hafta sonu 10:00–22:00</button>
+        </div>
+        <button id="saveWindowsButton" class="button button-primary full-width" type="button">Kaydet</button>
+        <p id="windowsMessage" class="message" role="status"></p>
+      </section>
+
       <div class="grid">
         <section class="panel">
           <p class="eyebrow">GÜNLÜK HAK</p>

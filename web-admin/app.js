@@ -140,6 +140,7 @@ function startListeners() {
   if (stopStateListener) stopStateListener();
   if (stopConfigListener) stopConfigListener();
   if (stopRequestsListener) stopRequestsListener();
+  windowsDirty = false;
 
   const requestsList = $("accessRequestsList");
   const approvalPanel = requestsList.closest(".approval-panel");
@@ -217,6 +218,10 @@ function startListeners() {
     }
     $("deviceUidInput").value = currentConfig.deviceAuthUid || "";
     $("exitPassStatus").textContent = currentConfig.exitPassword ? "Şifre belirlenmiş" : "Henüz belirlenmedi";
+    // Kaydedilmemiş düzenleme varken yerel taslağın üzerine yazma.
+    if (!windowsDirty) {
+      loadWindowEditor(currentConfig);
+    }
     $("connectionBadge").textContent = "Firebase bağlı";
     $("connectionBadge").classList.add("online");
   }, (error) => {
@@ -419,6 +424,199 @@ $("saveDeviceUidButton").addEventListener("click", async () => {
     setMessage("deviceUidMessage", "Masaüstü cihaz UID'si kaydedildi.", "success");
   } catch (error) {
     setMessage("deviceUidMessage", friendlyError(error), "error");
+  }
+});
+
+// Kullanım saatleri: deviceConfig.allowedWindowsEnabled / allowedWindows (days: 1=Pzt..7=Paz).
+const WEEK_DAYS = [
+  { value: 1, label: "Pzt" },
+  { value: 2, label: "Sal" },
+  { value: 3, label: "Çar" },
+  { value: 4, label: "Per" },
+  { value: 5, label: "Cum" },
+  { value: 6, label: "Cmt" },
+  { value: 7, label: "Paz" }
+];
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+let windowRows = [];
+let windowsDirty = false;
+
+function markWindowsDirty() {
+  windowsDirty = true;
+  setMessage("windowsMessage", "");
+}
+
+function parseWindowRows(config) {
+  const source = Array.isArray(config.allowedWindows) ? config.allowedWindows : [];
+  return source.map((item) => ({
+    days: Array.isArray(item?.days)
+      ? item.days.filter((day) => Number.isInteger(day) && day >= 1 && day <= 7)
+      : [],
+    start: typeof item?.start === "string" ? item.start : "",
+    end: typeof item?.end === "string" ? item.end : ""
+  }));
+}
+
+function updateWindowsToggleText() {
+  $("windowsEnabledText").textContent = $("windowsEnabledInput").checked ? "Açık" : "Kapalı";
+}
+
+function loadWindowEditor(config) {
+  $("windowsEnabledInput").checked = config.allowedWindowsEnabled === true;
+  windowRows = parseWindowRows(config);
+  updateWindowsToggleText();
+  renderWindowRows();
+}
+
+function windowNoteText(row) {
+  if (TIME_PATTERN.test(row.start) && TIME_PATTERN.test(row.end) && row.end < row.start) {
+    return `(ertesi gün ${row.end}'e kadar)`;
+  }
+  return "";
+}
+
+function renderWindowRows() {
+  const list = $("windowsList");
+  list.replaceChildren();
+  if (windowRows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Henüz aralık eklenmedi.";
+    list.append(empty);
+    return;
+  }
+
+  windowRows.forEach((row, index) => {
+    const card = document.createElement("div");
+    card.className = "window-row";
+
+    const days = document.createElement("div");
+    days.className = "day-chips";
+    for (const day of WEEK_DAYS) {
+      const chip = document.createElement("label");
+      chip.className = "day-chip";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = row.days.includes(day.value);
+      box.addEventListener("change", () => {
+        row.days = box.checked
+          ? [...row.days, day.value].sort((a, b) => a - b)
+          : row.days.filter((value) => value !== day.value);
+        markWindowsDirty();
+      });
+      const text = document.createElement("span");
+      text.textContent = day.label;
+      chip.append(box, text);
+      days.append(chip);
+    }
+
+    const times = document.createElement("div");
+    times.className = "time-fields";
+    const note = document.createElement("span");
+    note.className = "window-note";
+    const startInput = document.createElement("input");
+    startInput.type = "time";
+    startInput.value = row.start;
+    startInput.setAttribute("aria-label", `${index + 1}. satır başlangıç saati`);
+    const endInput = document.createElement("input");
+    endInput.type = "time";
+    endInput.value = row.end;
+    endInput.setAttribute("aria-label", `${index + 1}. satır bitiş saati`);
+    const separator = document.createElement("span");
+    separator.className = "time-sep";
+    separator.textContent = "–";
+    const updateNote = () => { note.textContent = windowNoteText(row); };
+    startInput.addEventListener("input", () => {
+      row.start = startInput.value;
+      updateNote();
+      markWindowsDirty();
+    });
+    endInput.addEventListener("input", () => {
+      row.end = endInput.value;
+      updateNote();
+      markWindowsDirty();
+    });
+    updateNote();
+    times.append(startInput, separator, endInput, note);
+
+    const footer = document.createElement("div");
+    footer.className = "window-row-footer";
+    const removeButton = document.createElement("button");
+    removeButton.className = "button button-quiet";
+    removeButton.type = "button";
+    removeButton.textContent = "Sil";
+    removeButton.addEventListener("click", () => {
+      windowRows.splice(index, 1);
+      markWindowsDirty();
+      renderWindowRows();
+    });
+    footer.append(removeButton);
+
+    card.append(days, times, footer);
+    list.append(card);
+  });
+}
+
+function validateWindowRows() {
+  for (let index = 0; index < windowRows.length; index += 1) {
+    const row = windowRows[index];
+    const label = `${index + 1}. satır`;
+    if (row.days.length === 0) return `${label}: en az bir gün seç.`;
+    if (!TIME_PATTERN.test(row.start) || !TIME_PATTERN.test(row.end)) {
+      return `${label}: başlangıç ve bitiş saatini gir.`;
+    }
+    if (row.start === row.end) return `${label}: başlangıç ve bitiş saati aynı olamaz.`;
+  }
+  return "";
+}
+
+$("windowsEnabledInput").addEventListener("change", () => {
+  updateWindowsToggleText();
+  markWindowsDirty();
+});
+
+$("addWindowButton").addEventListener("click", () => {
+  windowRows.push({ days: [], start: "09:00", end: "18:00" });
+  markWindowsDirty();
+  renderWindowRows();
+});
+
+$("windowsTemplateButton").addEventListener("click", () => {
+  windowRows = [
+    { days: [1, 2, 3, 4, 5], start: "15:00", end: "20:30" },
+    { days: [6, 7], start: "10:00", end: "22:00" }
+  ];
+  $("windowsEnabledInput").checked = true;
+  updateWindowsToggleText();
+  markWindowsDirty();
+  renderWindowRows();
+});
+
+$("saveWindowsButton").addEventListener("click", async () => {
+  const error = validateWindowRows();
+  if (error) {
+    setMessage("windowsMessage", error, "error");
+    return;
+  }
+
+  const button = $("saveWindowsButton");
+  button.disabled = true;
+  try {
+    await setDoc(doc(db, "deviceConfig", DEVICE_ID), {
+      allowedWindowsEnabled: $("windowsEnabledInput").checked,
+      allowedWindows: windowRows.map((row) => ({
+        days: [...row.days].sort((a, b) => a - b),
+        start: row.start,
+        end: row.end
+      })),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    windowsDirty = false;
+    setMessage("windowsMessage", "Kullanım saatleri kaydedildi.", "success");
+  } catch (error) {
+    setMessage("windowsMessage", friendlyError(error), "error");
+  } finally {
+    button.disabled = false;
   }
 });
 

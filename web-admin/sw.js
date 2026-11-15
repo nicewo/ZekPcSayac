@@ -1,4 +1,4 @@
-const CACHE_NAME = "zekpcsayac-admin-v4";
+const CACHE_NAME = "zekpcsayac-admin-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
