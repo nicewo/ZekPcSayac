@@ -34,6 +34,8 @@ namespace ZekPcSayac
         private readonly string _stateFile;
         // Null ise imza anahtarı kullanılamıyor; durum kilitli başlar ve yazılmaz.
         private readonly SignedStateStore? _stateStore;
+        // Anahtar bu açılışta yeni üretildiyse true (gerçek ilk kurulum).
+        private bool _stateKeyCreatedNow;
         private UsageState _state;
         private bool _audioStateCaptured;
         private bool _wasMutedBeforePause;
@@ -699,16 +701,17 @@ namespace ZekPcSayac
                 Height = CloseWarningText.Visibility == Visibility.Visible ? 92 : 76;
         }
 
-        private static SignedStateStore? CreateStateStore(string appDirectory, string stateFile)
+        private SignedStateStore? CreateStateStore(string appDirectory, string stateFile)
         {
-            byte[]? key = LoadOrCreateStateKey(appDirectory);
+            byte[]? key = LoadOrCreateStateKey(appDirectory, out _stateKeyCreatedNow);
             return key is null ? null : new SignedStateStore(stateFile, key);
         }
 
         // Anahtar DPAPI (CurrentUser) ile şifreli saklanır. Mevcut anahtar okunamazsa
         // yeni anahtar üretilmez; aksi halde imzalı durum sessizce sıfırlanabilirdi.
-        private static byte[]? LoadOrCreateStateKey(string appDirectory)
+        private static byte[]? LoadOrCreateStateKey(string appDirectory, out bool createdNow)
         {
+            createdNow = false;
             string keyPath = Path.Combine(appDirectory, "state-key.bin");
             try
             {
@@ -722,6 +725,7 @@ namespace ZekPcSayac
                 byte[] newKey = RandomNumberGenerator.GetBytes(32);
                 byte[] protectedNewKey = ProtectedData.Protect(newKey, null, DataProtectionScope.CurrentUser);
                 File.WriteAllBytes(keyPath, protectedNewKey);
+                createdNow = true;
                 return newKey;
             }
             catch
@@ -756,6 +760,13 @@ namespace ZekPcSayac
                     _clock.Restore(TimeSpan.FromTicks(result.State!.ServerOffsetTicks), result.State.LastTrustedUtc);
                     return result.State;
                 case LoadStatus.Missing:
+                    // Anahtar önceden vardı ama durum dosyası yok: dosya silinmiş demektir.
+                    // Tam gün süresi verilmez; buluttaki kalan süre ya da admin komutu açar.
+                    if (!_stateKeyCreatedNow)
+                    {
+                        AppendFirebaseLog("state file missing while key exists; state locked");
+                        return TamperedState();
+                    }
                     return DefaultState();
                 default:
                     AppendFirebaseLog("state tampered");

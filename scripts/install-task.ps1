@@ -54,7 +54,7 @@ if ($InstallDir) {
 
     Write-Host "Publish ciktisi kopyalaniyor: $sourceDir -> $InstallDir"
     Get-ChildItem -LiteralPath $sourceDir -Force |
-        Where-Object { $_.Name -ne 'scripts' -and $_.Name -ne '.git' } |
+        Where-Object { $_.Name -ne '.git' } |
         ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination $InstallDir -Recurse -Force
         }
